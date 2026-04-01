@@ -1,0 +1,13 @@
+.git
+data/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+*.db
+.venv/
+venv/
+.claude/
+reference/
+*.md
+a-eye.xml

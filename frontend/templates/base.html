@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}A-Eye{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=63">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body class="{% if catalogue_mode %}catalogue-mode{% endif %}" hx-headers='{"Accept": "application/json"}'>
+    <nav class="navbar">
+        <a href="/" class="nav-logo">
+            <img src="/static/a-eye-logo.png" alt="A-Eye" height="28">
+        </a>
+        <div class="nav-brand">
+            <a href="/">A-Eye</a>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
+            <a href="/review" class="nav-link {% if request.url.path == '/review' %}active{% endif %}">Review</a>
+            <a href="/search" class="nav-link {% if request.url.path == '/search' %}active{% endif %}">Search</a>
+            <a href="/queue" class="nav-link {% if request.url.path == '/queue' %}active{% endif %}">All Images</a>
+            <a href="/history" class="nav-link {% if request.url.path == '/history' %}active{% endif %}">History</a>
+            <a href="/settings" class="nav-link {% if request.url.path == '/settings' %}active{% endif %}">Settings</a>
+        </div>
+        <div class="nav-mode">
+            {% if photos_readonly %}
+            <span class="mode-badge mode-readonly">Read-Only</span>
+            {% elif catalogue_mode %}
+            <span class="mode-badge mode-catalogue">Catalogue</span>
+            {% elif settings.process_rename and (settings.process_write_description or settings.process_write_tags) %}
+            <span class="mode-badge mode-active">Full</span>
+            {% elif settings.process_rename %}
+            <span class="mode-badge mode-active">Rename</span>
+            {% elif settings.process_write_description or settings.process_write_tags %}
+            <span class="mode-badge mode-active">Metadata</span>
+            {% else %}
+            <span class="mode-badge mode-catalogue">Catalogue</span>
+            {% endif %}
+        </div>
+        <div class="nav-status" id="ollama-status" hx-get="/api/health" hx-trigger="load, every 30s" hx-swap="innerHTML" hx-target="#ollama-status">
+            <span class="status-dot unknown"></span> Checking...
+        </div>
+        {% if auth_enabled %}
+        <a href="#" class="nav-logout" onclick="doLogout(event)" title="Logout">Logout</a>
+        {% endif %}
+        <a href="https://spaceinvaderone.com" class="nav-sio" target="_blank" rel="noopener">
+            <img src="/static/sio.png" alt="SpaceInvaderOne" height="28">
+        </a>
+    </nav>
+
+    {% if photos_readonly %}
+    <div class="readonly-banner" id="readonly-banner">
+        Photos directory is read-only — Catalogue & Search Only
+        <button class="readonly-banner-close" onclick="dismissReadonlyBanner()" title="Dismiss">&times;</button>
+    </div>
+    {% endif %}
+
+    <div id="toast-container"></div>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Image Detail Modal -->
+    <div id="image-modal" class="modal-overlay" onclick="closeModal(event)" style="display:none">
+        <button class="modal-nav modal-nav-prev" id="modal-prev" onclick="modalPrev()" title="Previous image">&#8249;</button>
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeImageModal()">&times;</button>
+            <div class="modal-body">
+                <div class="modal-image-col">
+                    <div class="modal-image" id="modal-image-link" onclick="openFullImage()" title="Open full-size image">
+                        <img id="modal-thumb" src="" alt="">
+                    </div>
+                    <details id="modal-sidecar-section" style="display:none">
+                        <summary>XMP Sidecar Data</summary>
+                        <pre id="modal-sidecar-raw"></pre>
+                    </details>
+                </div>
+                <div class="modal-details">
+                    <h2 id="modal-filename"></h2>
+                    <span id="modal-status" class="badge"></span>
+
+                    <div class="modal-meta">
+                        <div class="meta-row"><span class="meta-label">Date</span><span id="modal-date">-</span></div>
+                        <div class="meta-row"><span class="meta-label">Camera</span><span id="modal-camera">-</span></div>
+                        <div class="meta-row"><span class="meta-label">Location</span><span id="modal-location">-</span></div>
+                        <div class="meta-row"><span class="meta-label">GPS</span><span id="modal-gps">-</span></div>
+                        <div class="meta-row"><span class="meta-label">Confidence</span><span id="modal-confidence">-</span></div>
+                        <div class="meta-row"><span class="meta-label">Original Name</span><span id="modal-original">-</span></div>
+                        <div class="meta-row"><span class="meta-label">File Size</span><span id="modal-size">-</span></div>
+                    </div>
+
+                    <div id="modal-context-section" style="display:none">
+                        <h3>Processing Context</h3>
+                        <p id="modal-context" class="text-muted"></p>
+                    </div>
+
+                    <div id="modal-description-section" style="display:none">
+                        <h3>AI Description</h3>
+                        <p id="modal-description"></p>
+                    </div>
+
+                    <details id="modal-exif-section" style="display:none">
+                        <summary>Raw EXIF Data</summary>
+                        <pre id="modal-exif-raw"></pre>
+                    </details>
+
+                    <div class="modal-actions">
+                        <button class="btn btn-sm btn-success" id="modal-approve-btn" onclick="modalApprove()" style="display:none">Approve</button>
+                        <button class="btn btn-sm" id="modal-skip-btn" onclick="modalSkip()" style="display:none">Skip</button>
+                        <button class="btn btn-sm" onclick="modalReprocess()">Reprocess</button>
+                        <button class="btn btn-sm btn-warning" id="modal-revert-btn" onclick="modalRevert()" style="display:none">Revert</button>
+                        <a class="btn btn-sm" id="modal-download-btn" href="#" download>Download</a>
+                        <button class="btn btn-sm btn-error" id="modal-trash-btn" onclick="modalTrash()" style="display:none">Delete</button>
+                        <button class="btn btn-sm" id="modal-queue-btn" onclick="modalToggleQueue()">Add to Queue</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <button class="modal-nav modal-nav-next" id="modal-next" onclick="modalNext()" title="Next image">&#8250;</button>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="confirm-overlay" style="display:none">
+        <div class="confirm-dialog">
+            <h3 id="confirm-title">Delete file?</h3>
+            <p id="confirm-message"></p>
+            <div class="confirm-actions">
+                <button class="btn" onclick="confirmCancel()">Cancel</button>
+                <button class="btn btn-error" id="confirm-ok-btn" onclick="confirmOk()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Modal -->
+    <div id="context-modal" class="confirm-overlay" style="display:none">
+        <div class="confirm-dialog" style="max-width:500px">
+            <h3 id="context-modal-title">Reprocess with Context</h3>
+            <p class="text-muted">Provide additional context to help the AI produce better results.</p>
+            <p id="context-modal-previous" style="display:none" class="text-muted">
+                <small>Previously used: <em id="context-modal-prev-text"></em></small>
+            </p>
+            <textarea id="context-modal-input" rows="3" style="width:100%;margin:0.5rem 0"
+                      placeholder="e.g. Holiday to Crete 2021, or The grey husky is named Jax"
+                      maxlength="500"></textarea>
+            <div class="confirm-actions">
+                <button class="btn" onclick="contextModalCancel()">Cancel</button>
+                <button class="btn" onclick="contextModalSkip()">Without Context</button>
+                <button class="btn btn-primary" onclick="contextModalOk()">Proceed</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Destructive Mode Modal -->
+    <div id="destructive-modal" class="confirm-overlay" style="display:none">
+        <div class="confirm-dialog">
+            <h3>Destructive Mode Not Enabled</h3>
+            <p id="destructive-modal-message"></p>
+            <div class="confirm-actions">
+                <button class="btn" onclick="closeDestructiveModal()">Cancel</button>
+                <a class="btn btn-primary" href="/settings">Go to Settings</a>
+            </div>
+        </div>
+    </div>
+
+    {% block page_scripts %}{% endblock %}
+    <script>
+    window.PHOTOS_READONLY = {{ 'true' if photos_readonly else 'false' }};
+    window.CATALOGUE_MODE = {{ 'true' if catalogue_mode else 'false' }};
+    </script>
+    <script src="/static/js/app.js?v=75"></script>
+</body>
+</html>

@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}{% if workspace_mode %}Workspace {% endif %}All Images - A-Eye{% endblock %}
+
+{% block content %}
+{% if workspace_mode %}
+<script>var API_PREFIX = '{{ api_prefix }}';</script>
+{% endif %}
+
+{% set source_param = '&source=workspace' if source == 'workspace' else '' %}
+{% set sort_param = '&sort=' + sort + '&sort_dir=' + sort_dir if sort != 'created_at' or sort_dir != 'desc' else '' %}
+
+<div class="page-header">
+    <h1>{% if workspace_mode %}Workspace {% endif %}All Images</h1>
+    <div class="header-actions">
+        <div class="source-toggle">
+            <a href="/queue" class="btn btn-sm {% if not workspace_mode %}btn-primary{% endif %}">Library</a>
+            <a href="/queue?source=workspace" class="btn btn-sm {% if workspace_mode %}btn-primary{% endif %}">Workspace</a>
+        </div>
+        <span class="badge">{{ total }} images</span>
+    </div>
+</div>
+
+{% if workspace_mode %}
+<div class="workspace-banner">Temporary Workspace — files will not be kept on the server</div>
+{% endif %}
+
+<!-- Status Tabs -->
+<div class="status-tabs">
+    <a href="/queue?{{ 'source=workspace' if workspace_mode else '' }}{{ sort_param }}" class="status-tab {% if not status_filter %}active{% endif %}">
+        All <span class="tab-count">{{ stats.get('total', 0) }}</span>
+    </a>
+    <a href="/queue?status=pending{{ source_param }}{{ sort_param }}" class="status-tab {% if status_filter == 'pending' %}active{% endif %}">
+        Pending <span class="tab-count">{{ stats.get('pending', 0) }}</span>
+    </a>
+    <a href="/queue?status=proposed{{ source_param }}{{ sort_param }}" class="status-tab tab-proposed {% if status_filter == 'proposed' %}active{% endif %}">
+        Proposed <span class="tab-count">{{ stats.get('proposed', 0) }}</span>
+    </a>
+    <a href="/queue?status=renamed{{ source_param }}{{ sort_param }}" class="status-tab tab-renamed {% if status_filter == 'renamed' %}active{% endif %}">
+        Renamed <span class="tab-count">{{ stats.get('renamed', 0) }}</span>
+    </a>
+    <a href="/queue?status=completed{{ source_param }}{{ sort_param }}" class="status-tab tab-completed {% if status_filter == 'completed' %}active{% endif %}">
+        {% if catalogue_mode %}Catalogued{% else %}Completed{% endif %} <span class="tab-count">{{ stats.get('completed', 0) }}</span>
+    </a>
+    {% if not workspace_mode %}
+    <a href="/queue?status=quality_issues{{ sort_param }}" class="status-tab tab-quality {% if status_filter == 'quality_issues' %}active{% endif %}">
+        Quality Issues <span class="tab-count">{{ stats.get('quality_issues', 0) }}</span>
+    </a>
+    {% endif %}
+    <a href="/queue?status=error{{ source_param }}{{ sort_param }}" class="status-tab tab-error {% if status_filter == 'error' %}active{% endif %}">
+        Errors <span class="tab-count">{{ stats.get('error', 0) }}</span>
+    </a>
+    <a href="/queue?status=skipped{{ source_param }}{{ sort_param }}" class="status-tab {% if status_filter == 'skipped' %}active{% endif %}">
+        Skipped <span class="tab-count">{{ stats.get('skipped', 0) }}</span>
+    </a>
+    {% if not workspace_mode %}
+    <a href="/queue?status=trashed{{ sort_param }}" class="status-tab tab-trashed {% if status_filter == 'trashed' %}active{% endif %}">
+        Trashed <span class="tab-count">{{ stats.get('trashed', 0) }}</span>
+    </a>
+    {% endif %}
+    <a href="/queue?status=queued{{ source_param }}{{ sort_param }}" class="status-tab tab-queued {% if status_filter == 'queued' %}active{% endif %}">
+        Queue <span class="tab-count">{{ stats.get('queued', 0) }}</span>
+    </a>
+</div>
+
+<!-- Bulk Actions (context-aware) -->
+{% if status_filter not in ('pending', 'processing') %}
+<div class="filters-bar">
+    <div class="filter-group">
+        <input type="checkbox" id="select-all" onchange="toggleSelectAll(this)">
+        <label for="select-all" style="cursor:pointer; font-size:0.85rem;">Select All</label>
+    </div>
+    <div class="filter-group">
+        {% if not status_filter %}
+        <button class="btn btn-sm btn-primary" onclick="bulkAction('process')">Reprocess Selected</button>
+        <button class="btn btn-sm" onclick="bulkQueueAdd()">Add to Queue</button>
+        <button class="btn btn-sm" onclick="bulkDownload()">Download Selected</button>
+        {% if workspace_mode %}<button class="btn btn-sm btn-error" onclick="wsBulkDelete()">Delete Selected</button>{% else %}<button class="btn btn-sm btn-error" onclick="bulkTrash()">Delete Selected</button>{% endif %}
+        {% elif status_filter == 'proposed' %}
+        <button class="btn btn-sm btn-success" onclick="bulkAction('approve')">Approve Selected</button>
+        <button class="btn btn-sm btn-muted" onclick="bulkSkip()">Skip Selected</button>
+        <button class="btn btn-sm btn-primary" onclick="bulkAction('process')">Reprocess Selected</button>
+        <button class="btn btn-sm" onclick="bulkQueueAdd()">Add to Queue</button>
+        <button class="btn btn-sm" onclick="bulkDownload()">Download Selected</button>
+        {% if workspace_mode %}<button class="btn btn-sm btn-error" onclick="wsBulkDelete()">Delete Selected</button>{% else %}<button class="btn btn-sm btn-error" onclick="bulkTrash()">Delete Selected</button>{% endif %}
+        {% elif status_filter == 'renamed' %}
+        {% if not workspace_mode %}<button class="btn btn-sm btn-warning" onclick="bulkRevert()">Revert Selected</button>{% endif %}
+        <button class="btn btn-sm" onclick="bulkQueueAdd()">Add to Queue</button>
+        <button class="btn btn-sm" onclick="bulkDownload()">Download Selected</button>
+        {% if workspace_mode %}<button class="btn btn-sm btn-error" onclick="wsBulkDelete()">Delete Selected</button>{% endif %}
+        {% elif status_filter == 'error' %}
+        <button class="btn btn-sm btn-primary" onclick="bulkAction('process')">Retry Selected</button>
+        <button class="btn btn-sm" onclick="bulkQueueAdd()">Add to Queue</button>
+        {% if workspace_mode %}<button class="btn btn-sm btn-error" onclick="wsBulkDelete()">Delete Selected</button>{% else %}<button class="btn btn-sm btn-error" onclick="bulkTrash()">Delete Selected</button>{% endif %}
+        {% elif status_filter == 'quality_issues' %}
+        <button class="btn btn-sm btn-primary" onclick="bulkAction('process')">Reprocess Selected</button>
+        <button class="btn btn-sm" onclick="bulkQueueAdd()">Add to Queue</button>
+        <button class="btn btn-sm btn-error" onclick="bulkTrash()">Delete Selected</button>
+        {% elif status_filter == 'completed' %}
+        <button class="btn btn-sm btn-primary" onclick="bulkAction('process')">Reprocess Selected</button>
+        <button class="btn btn-sm" onclick="bulkQueueAdd()">Add to Queue</button>
+        <button class="btn btn-sm" onclick="bulkDownload()">Download Selected</button>
+        {% elif status_filter == 'skipped' %}
+        <button class="btn btn-sm btn-primary" onclick="bulkUnskip()">Un-skip Selected</button>
+        <button class="btn btn-sm" onclick="bulkQueueAdd()">Add to Queue</button>
+        {% if workspace_mode %}<button class="btn btn-sm btn-error" onclick="wsBulkDelete()">Delete Selected</button>{% else %}<button class="btn btn-sm btn-error" onclick="bulkTrash()">Delete Selected</button>{% endif %}
+        {% elif status_filter == 'trashed' %}
+        <button class="btn btn-sm btn-primary" onclick="bulkRestore()">Restore Selected</button>
+        <button class="btn btn-sm btn-error" onclick="emptyTrash()">Empty Trash</button>
+        {% elif status_filter == 'queued' %}
+        <button class="btn btn-sm btn-primary" onclick="bulkAction('process')">Reprocess Selected</button>
+        <button class="btn btn-sm btn-warning" onclick="bulkQueueRemove()">Remove from Queue</button>
+        <button class="btn btn-sm" onclick="bulkDownload()">Download Selected</button>
+        {% if not workspace_mode %}<button class="btn btn-sm btn-error" onclick="bulkTrash()">Delete Selected</button>{% endif %}
+        <button class="btn btn-sm" onclick="clearQueue()">Clear Queue</button>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Image Table -->
+{% set sort_base = '/queue?' + ('status=' + status_filter + '&' if status_filter else '') + (source_param[1:] + '&' if source_param else '') %}
+<table class="table">
+    <thead>
+        <tr>
+            {% if status_filter not in ('pending', 'processing') %}<th style="width:30px"></th>{% endif %}
+            <th>Thumbnail</th>
+            <th class="sortable">
+                <a href="{{ sort_base }}sort=current_filename&sort_dir={{ 'desc' if sort == 'current_filename' and sort_dir == 'asc' else 'asc' }}">
+                    Current Name{% if sort == 'current_filename' %} <span class="sort-arrow">{{ '▲' if sort_dir == 'asc' else '▼' }}</span>{% endif %}
+                </a>
+            </th>
+            <th colspan="2">Previously / Proposed</th>
+            <th class="sortable">
+                <a href="{{ sort_base }}sort=exif_date&sort_dir={{ 'asc' if sort == 'exif_date' and sort_dir == 'desc' else 'desc' }}">
+                    Date{% if sort == 'exif_date' %} <span class="sort-arrow">{{ '▲' if sort_dir == 'asc' else '▼' }}</span>{% endif %}
+                </a>
+            </th>
+            <th>Location</th>
+            <th class="sortable">
+                <a href="{{ sort_base }}sort=confidence_score&sort_dir={{ 'asc' if sort == 'confidence_score' and sort_dir == 'desc' else 'desc' }}">
+                    Confidence{% if sort == 'confidence_score' %} <span class="sort-arrow">{{ '▲' if sort_dir == 'asc' else '▼' }}</span>{% endif %}
+                </a>
+            </th>
+            <th class="sortable">
+                <a href="{{ sort_base }}sort=status&sort_dir={{ 'desc' if sort == 'status' and sort_dir == 'asc' else 'asc' }}">
+                    Status{% if sort == 'status' %} <span class="sort-arrow">{{ '▲' if sort_dir == 'asc' else '▼' }}</span>{% endif %}
+                </a>
+            </th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for image in images %}
+        <tr id="image-row-{{ image.id }}" data-id="{{ image.id }}" data-context="{{ image.processing_context or '' }}">
+            {% if status_filter not in ('pending', 'processing') %}<td><input type="checkbox" class="image-checkbox" value="{{ image.id }}"></td>{% endif %}
+            <td class="clickable" onclick="openImageModal({{ image.id }})">
+                <img src="{{ api_prefix|default('/api') }}/images/{{ image.id }}/thumbnail" alt="" class="thumbnail-sm"
+                     loading="lazy" onerror="this.style.display='none'">
+            </td>
+            <td class="filename clickable" id="queue-current-{{ image.id }}" title="{{ image.current_filename or image.original_filename }}" onclick="openImageModal({{ image.id }})">{{ image.current_filename or image.original_filename }}</td>
+            <td class="name-label" id="queue-label-{{ image.id }}">{% if image.status == 'proposed' %}<span class="name-label-proposed">proposed</span>{% elif image.status == 'renamed' %}<span class="name-label-was">was</span>{% endif %}</td>
+            <td class="filename" id="queue-other-{{ image.id }}">{% if image.status == 'proposed' %}<span class="name-other-proposed" title="{{ image.final_filename or '' }}">{{ image.final_filename or '-' }}</span>{% elif image.status == 'renamed' %}<span class="name-other-was" title="{{ image.original_filename }}">{{ image.original_filename }}</span>{% else %}-{% endif %}</td>
+            <td>{{ image.exif_date or '-' }}</td>
+            <td>{{ image.location_name or '-' }}</td>
+            <td>
+                {% if image.confidence_score is not none and image.status != 'completed' %}
+                <span class="confidence confidence-{{ 'high' if image.confidence_score >= 0.7 else ('medium' if image.confidence_score >= 0.4 else 'low') }}">
+                    {{ "%.0f"|format(image.confidence_score * 100) }}%
+                </span>
+                {% else %}-{% endif %}
+            </td>
+            <td id="queue-status-{{ image.id }}">
+                <span class="badge badge-{{ image.status }}">{{ image.status }}</span>
+                {% if image.processing_context %}
+                <span class="badge badge-context" title="{{ image.processing_context }}">ctx</span>
+                {% endif %}
+                {% if image.in_queue %}
+                <span class="badge badge-queue">Q</span>
+                {% endif %}
+                {% if image.quality_flags %}
+                {% for flag in image.quality_flags %}
+                <span class="badge badge-quality">{{ flag }}</span>
+                {% endfor %}
+                {% endif %}
+            </td>
+            <td id="queue-actions-{{ image.id }}">
+                {% if image.status == 'proposed' %}
+                <button class="btn btn-xs btn-success" onclick="queueApprove({{ image.id }})">Approve</button>
+                {% if workspace_mode %}<button class="btn btn-xs btn-error" onclick="wsDeleteOne({{ image.id }})">Delete</button>{% else %}<button class="btn btn-xs btn-error" onclick="trashOne({{ image.id }})">Delete</button>{% endif %}
+                {% elif image.status == 'error' %}
+                <button class="btn btn-xs btn-primary" onclick="queueProcess({{ image.id }})">Retry</button>
+                {% if workspace_mode %}<button class="btn btn-xs btn-error" onclick="wsDeleteOne({{ image.id }})">Delete</button>{% else %}<button class="btn btn-xs btn-error" onclick="trashOne({{ image.id }})">Delete</button>{% endif %}
+                {% elif image.status == 'renamed' %}
+                {% if not workspace_mode %}<button class="btn btn-xs btn-warning" onclick="queueRevert({{ image.id }})">Revert</button>{% endif %}
+                {% if workspace_mode %}<button class="btn btn-xs btn-error" onclick="wsDeleteOne({{ image.id }})">Delete</button>{% endif %}
+                {% elif image.status == 'skipped' %}
+                <button class="btn btn-xs btn-primary" onclick="queueUnskip({{ image.id }})">Un-skip</button>
+                {% if workspace_mode %}<button class="btn btn-xs btn-error" onclick="wsDeleteOne({{ image.id }})">Delete</button>{% else %}<button class="btn btn-xs btn-error" onclick="trashOne({{ image.id }})">Delete</button>{% endif %}
+                {% elif image.status == 'trashed' %}
+                <button class="btn btn-xs btn-primary" onclick="restoreOne({{ image.id }})">Restore</button>
+                {% endif %}
+                <a href="{{ api_prefix|default('/api') }}/images/{{ image.id }}/file?download=true" class="btn btn-xs" title="Download" download>DL</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if images|length == 0 %}
+<p class="empty-state">{% if workspace_mode %}No images in workspace. Upload files from the Dashboard.{% else %}No images found. Try scanning your photos directory from the Dashboard.{% endif %}</p>
+{% endif %}
+
+<!-- Pagination -->
+{% set sort_url = 'sort=' + sort + '&sort_dir=' + sort_dir + '&' if sort != 'created_at' or sort_dir != 'desc' else '' %}
+{% set page_url_base = '/queue?' + ('status=' + status_filter + '&' if status_filter else '') + (source_param[1:] + '&' if source_param else '') + sort_url %}
+{% include '_pagination.html' %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+window.DESTRUCTIVE_LIBRARY = {{ 'true' if settings.destructive_mode_library else 'false' }};
+window.DESTRUCTIVE_WORKSPACE = {{ 'true' if settings.destructive_mode_workspace else 'false' }};
+</script>
+{% endblock %}

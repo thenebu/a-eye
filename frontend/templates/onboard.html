@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup - A-Eye</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=58">
+    <link rel="stylesheet" href="/static/css/onboard.css?v=8">
+</head>
+<body>
+    <div class="onboard-wrapper">
+        <h1 class="onboard-title">
+            <img src="/static/a-eye-logo.png" alt="" height="32" style="vertical-align: middle; margin-right: 0.5rem;">
+            A-Eye Setup
+        </h1>
+
+        <!-- Progress Steps (dynamically rendered by JS) -->
+        <div class="onboard-progress" id="onboard-progress"></div>
+
+        <!-- Step 1: Connection -->
+        <div class="onboard-step" id="onboard-step-1">
+            <div class="card">
+                <h3>Connect to Ollama</h3>
+                <p class="onboard-desc">Enter the URL of your Ollama instance and test the connection.</p>
+
+                <div class="form-group">
+                    <label for="onboard-host">Ollama Host URL</label>
+                    <div class="input-with-button">
+                        <input type="text" id="onboard-host" value="{{ settings.ollama_host }}" placeholder="http://localhost:11434">
+                        <button class="btn btn-primary btn-sm" id="onboard-test-btn" onclick="onboardTestConnection()">
+                            Test Connection
+                        </button>
+                    </div>
+                    <div id="onboard-connection-result"></div>
+                </div>
+
+                <!-- GPU/CPU Selection — shown after successful connection -->
+                <div id="onboard-hardware-group" style="display:none">
+                    <div class="form-group">
+                        <label>Does your Ollama server have a GPU?</label>
+                        <div class="mode-cards mode-cards-compact" style="margin-top: 0.5rem;">
+                            <div class="mode-card mode-card-compact" id="hw-card-gpu"
+                                 onclick="onboardSelectHardware('gpu')">
+                                <div class="mode-card-title">GPU</div>
+                                <div class="mode-card-desc">NVIDIA, AMD, or Apple Silicon GPU available.</div>
+                            </div>
+                            <div class="mode-card mode-card-compact" id="hw-card-cpu"
+                                 onclick="onboardSelectHardware('cpu')">
+                                <div class="mode-card-title">CPU Only</div>
+                                <div class="mode-card-desc">No dedicated GPU. Models run on CPU.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Model Recommendation — shown after GPU/CPU choice -->
+                <div id="onboard-recommendation" style="display:none">
+                    <div id="onboard-rec-content"></div>
+                    <div id="onboard-pull-area" style="display:none; margin-top: 0.75rem;">
+                        <div class="pull-progress-container">
+                            <div class="pull-progress-bar" id="onboard-pull-bar"></div>
+                        </div>
+                        <small class="pull-status" id="onboard-pull-status">Preparing download...</small>
+                    </div>
+                </div>
+
+                <!-- Model Selection Dropdowns -->
+                <div id="onboard-model-group" style="display:none">
+                    <div class="form-group">
+                        <label for="onboard-vision-model">Vision Model (required)</label>
+                        <select id="onboard-vision-model">
+                            <option value="" disabled selected>Select a vision model...</option>
+                        </select>
+                        <small>Analyses photos, generates descriptions, and suggests filenames. Must support image input.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="onboard-llm-model">Text LLM for Search (optional)</label>
+                        <select id="onboard-llm-model">
+                            <option value="">None &mdash; keyword search only</option>
+                        </select>
+                        <small>Enables natural-language search queries like "photos of dogs at the beach".</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="onboard-nav">
+                <span></span>
+                <button class="btn btn-primary" id="onboard-next-1" onclick="onboardNext()" disabled>Next</button>
+            </div>
+        </div>
+
+        <!-- Step 2: Purpose -->
+        <div class="onboard-step" id="onboard-step-2" style="display:none">
+            <div class="card">
+                <h3>What should A-Eye do with your photos?</h3>
+                <p class="onboard-desc">A-Eye uses AI to understand your photos. Choose how you want it to work.</p>
+
+                <div class="mode-cards">
+                    <div class="mode-card" id="mode-card-catalogue" onclick="onboardSelectPurpose('catalogue')">
+                        <div class="mode-card-icon">&#128269;</div>
+                        <div class="mode-card-title">Catalogue Only</div>
+                        <div class="mode-card-desc">
+                            Analyse photos with AI. Descriptions, tags, and metadata stored in the database only.
+                            Your photo library stays completely untouched.
+                        </div>
+                        <div class="mode-card-hint">Best for: Exploring A-Eye risk-free, or when your library is managed by another tool</div>
+                    </div>
+
+                    <div class="mode-card-readonly-notice" id="readonly-notice" style="display:none">
+                        Your photos directory is mounted read-only. Only catalogue mode is available.
+                        You can change this later by remounting with write access, then adjust in Settings.
+                    </div>
+
+                    <div class="mode-card" id="mode-card-metadata" onclick="onboardSelectPurpose('metadata')">
+                        <div class="mode-card-icon">&#127991;</div>
+                        <div class="mode-card-title">Enrich Metadata</div>
+                        <div class="mode-card-desc">
+                            Write AI-generated descriptions and tags to XMP sidecar files alongside your photos.
+                            No files are renamed.
+                        </div>
+                        <div class="mode-card-hint">Best for: Immich, Lightroom, and Photoprism users who want searchable AI metadata</div>
+                    </div>
+
+                    <div class="mode-card" id="mode-card-full" onclick="onboardSelectPurpose('full')">
+                        <div class="mode-card-icon">&#9998;</div>
+                        <div class="mode-card-title">Full Processing</div>
+                        <div class="mode-card-desc">
+                            Rename photos with AI-generated descriptive filenames, write XMP metadata, or both.
+                            You choose exactly which actions to take.
+                        </div>
+                        <div class="mode-card-hint">Best for: Organising old photo libraries, bulk renaming camera dumps</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="onboard-nav">
+                <button class="btn" onclick="onboardBack()">Back</button>
+                <button class="btn btn-primary" id="onboard-next-2" onclick="onboardNext()" disabled>Next</button>
+            </div>
+        </div>
+
+        <!-- Step 3: Actions (metadata or full mode) -->
+        <div class="onboard-step" id="onboard-step-3" style="display:none">
+            <div class="card">
+                <h3>Choose Your Actions</h3>
+                <p class="onboard-desc">Select which processing actions A-Eye should perform. You can change these later in Settings.</p>
+
+                <!-- Rename checkbox (full mode only) -->
+                <div class="form-group" id="onboard-rename-group">
+                    <label class="processing-mode-label">
+                        <input type="checkbox" id="onboard-process-rename" checked onchange="onboardCheckModes()">
+                        <div>
+                            <strong>Rename Files</strong>
+                            <small>e.g. PICT0018.JPG &rarr; mountain_village_coast_2004-07-10.jpg</small>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- XMP checkboxes (both modes) -->
+                <div class="form-group">
+                    <label class="processing-mode-label">
+                        <input type="checkbox" id="onboard-process-description" onchange="onboardCheckModes()">
+                        <div>
+                            <strong>Write AI Description to Metadata</strong>
+                            <small>XMP sidecar &mdash; searchable in Immich, Lightroom, etc.</small>
+                        </div>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="processing-mode-label">
+                        <input type="checkbox" id="onboard-process-tags" onchange="onboardCheckModes()">
+                        <div>
+                            <strong>Write AI Tags to Metadata</strong>
+                            <small>Keyword tags (mountain, lake, sunset) in XMP sidecar for searchability</small>
+                        </div>
+                    </label>
+                </div>
+
+                <div id="onboard-mode-error" class="onboard-warning" style="display:none">
+                    At least one processing mode must be enabled.
+                </div>
+
+                <div id="onboard-immich-tip" class="onboard-info" style="display:none">
+                    <strong>Immich users:</strong> XMP sidecar files will be created next to your images.
+                    Run "Sidecar Metadata &rarr; Discover" in Immich to import descriptions and tags.
+                </div>
+
+                <!-- Rename mode sub-section (full mode only) -->
+                <div id="onboard-rename-options">
+                    <h4 style="margin-top: 1.25rem; margin-bottom: 0.5rem;">How should renaming work?</h4>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="onboard_rename_mode" value="review" checked onchange="onboardRenameMode()">
+                            <div>
+                                <strong>Review first</strong>
+                                <small>Propose names for your approval before renaming. Safest option.</small>
+                            </div>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="onboard_rename_mode" value="auto" onchange="onboardRenameMode()">
+                            <div>
+                                <strong>Auto-rename</strong>
+                                <small>Rename immediately. You can undo any rename from History.</small>
+                            </div>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="onboard_rename_mode" value="auto-low-confidence" onchange="onboardRenameMode()">
+                            <div>
+                                <strong>Smart auto</strong>
+                                <small>Auto-rename when confident. Flag uncertain ones for your review.</small>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div id="onboard-confidence-group" style="display:none">
+                        <div class="form-group" style="margin-top: 0.75rem;">
+                            <label for="onboard-confidence">
+                                Confidence threshold: <strong><span id="onboard-confidence-display">0.60</span></strong>
+                            </label>
+                            <input type="range" id="onboard-confidence" min="0" max="1" step="0.05" value="0.6"
+                                   oninput="document.getElementById('onboard-confidence-display').textContent = parseFloat(this.value).toFixed(2)">
+                            <small>Below this threshold, photos go to Review instead of auto-renaming.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="onboard-nav">
+                <button class="btn" onclick="onboardBack()">Back</button>
+                <button class="btn btn-primary" id="onboard-next-3" onclick="onboardNext()">Next</button>
+            </div>
+        </div>
+
+        <!-- Step 4: Automation -->
+        <div class="onboard-step" id="onboard-step-4" style="display:none">
+            <div class="card">
+                <h3>Watch for new photos?</h3>
+                <p class="onboard-desc">A-Eye can automatically detect new photos added to your library.</p>
+
+                <div class="mode-cards mode-cards-compact">
+                    <div class="mode-card mode-card-compact selected" id="mode-card-manual" onclick="onboardSelectWatch(false)">
+                        <div class="mode-card-title">Manual Scan</div>
+                        <div class="mode-card-desc">
+                            You trigger scans from the dashboard when you want.
+                            Good for one-time imports or occasional use.
+                        </div>
+                    </div>
+
+                    <div class="mode-card mode-card-compact" id="mode-card-watch" onclick="onboardSelectWatch(true)">
+                        <div class="mode-card-title">Auto-Watch</div>
+                        <div class="mode-card-desc">
+                            A-Eye watches your photo directory and processes new files as they appear.
+                            Good for active photo workflows.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="onboard-info" style="margin-top: 1rem;">
+                    You can always trigger a manual scan regardless of this setting. Watch mode can be changed later in Settings.
+                </div>
+            </div>
+
+            <div class="onboard-nav">
+                <button class="btn" onclick="onboardBack()">Back</button>
+                <button class="btn btn-primary" id="onboard-next-4" onclick="onboardNext()">Next</button>
+            </div>
+        </div>
+
+        <!-- Step 5: Security -->
+        <div class="onboard-step" id="onboard-step-5" style="display:none">
+            <div class="card">
+                <h3>Protect A-Eye with a password?</h3>
+                <p class="onboard-desc">A-Eye runs as a web app on your network. You can restrict access with a password.</p>
+
+                <div class="mode-cards mode-cards-compact">
+                    <div class="mode-card mode-card-compact selected" id="mode-card-nopass" onclick="onboardSelectSecurity('skip')">
+                        <div class="mode-card-title">No Password</div>
+                        <div class="mode-card-desc">
+                            Anyone on your local network can access A-Eye.
+                            Fine for home networks behind a firewall.
+                        </div>
+                    </div>
+
+                    <div class="mode-card mode-card-compact" id="mode-card-setpass" onclick="onboardSelectSecurity('password')">
+                        <div class="mode-card-title">Set Password</div>
+                        <div class="mode-card-desc">
+                            Protect A-Eye with a username and password.
+                            Recommended if others share your network.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Password fields (shown when Set Password selected) -->
+                <div id="onboard-password-fields" style="display:none; margin-top: 1rem;">
+                    <div class="form-group">
+                        <label for="onboard-username">Username</label>
+                        <input type="text" id="onboard-username" value="admin">
+                    </div>
+                    <div class="form-group">
+                        <label for="onboard-password">Password</label>
+                        <input type="password" id="onboard-password" placeholder="Enter a password" oninput="onboardCheckPassword()">
+                        <div class="password-strength" id="onboard-strength" style="display:none">
+                            <div class="strength-bar">
+                                <div class="strength-fill" id="onboard-strength-fill"></div>
+                            </div>
+                            <span class="strength-label" id="onboard-strength-label"></span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="onboard-password-confirm">Confirm Password</label>
+                        <input type="password" id="onboard-password-confirm" placeholder="Confirm your password" oninput="onboardCheckPassword()">
+                        <small class="password-match-error" id="onboard-match-error" style="display:none">Passwords do not match</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="onboard-nav">
+                <button class="btn" onclick="onboardBack()">Back</button>
+                <button class="btn btn-primary" id="onboard-next-5" onclick="onboardNext()">Next</button>
+            </div>
+        </div>
+
+        <!-- Step 6: Ready -->
+        <div class="onboard-step" id="onboard-step-6" style="display:none">
+            <div class="card">
+                <h3>Ready to Go</h3>
+                <p class="onboard-desc">Here's your configuration. Click any row to go back and change it.</p>
+
+                <div class="onboard-summary">
+                    <div class="summary-row summary-row-clickable" onclick="onboardGoToStep(1)">
+                        <span class="summary-label">Ollama Host</span>
+                        <span class="summary-value" id="summary-host">-</span>
+                    </div>
+                    <div class="summary-row summary-row-clickable" onclick="onboardGoToStep(1)">
+                        <span class="summary-label">Vision Model</span>
+                        <span class="summary-value" id="summary-model">-</span>
+                    </div>
+                    <div class="summary-row summary-row-clickable" onclick="onboardGoToStep(1)">
+                        <span class="summary-label">Search LLM</span>
+                        <span class="summary-value" id="summary-llm">-</span>
+                    </div>
+                    <div class="summary-row summary-row-clickable" onclick="onboardGoToStep(2)">
+                        <span class="summary-label">Mode</span>
+                        <span class="summary-value" id="summary-mode">-</span>
+                    </div>
+                    <div class="summary-row summary-row-clickable" id="summary-actions-row">
+                        <span class="summary-label">Actions</span>
+                        <span class="summary-value" id="summary-actions">-</span>
+                    </div>
+                    <div class="summary-row summary-row-clickable" onclick="onboardGoToStep(4)">
+                        <span class="summary-label">Watch Mode</span>
+                        <span class="summary-value" id="summary-watch">-</span>
+                    </div>
+                    <div class="summary-row summary-row-clickable" onclick="onboardGoToStep(5)">
+                        <span class="summary-label">Authentication</span>
+                        <span class="summary-value" id="summary-auth">Disabled</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="onboard-nav">
+                <button class="btn" onclick="onboardBack()">Back</button>
+                <button class="btn btn-primary btn-lg" id="onboard-finish-btn" onclick="onboardFinish()">Start Using A-Eye</button>
+            </div>
+        </div>
+    </div>
+
+    <script>var _photosReadOnly = {{ 'true' if photos_readonly else 'false' }};</script>
+    <script src="/static/js/onboard.js?v=8"></script>
+</body>
+</html>

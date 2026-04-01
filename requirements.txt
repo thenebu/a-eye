@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+httpx
+Pillow
+pillow-heif
+rawpy
+exifread
+aiosqlite
+jinja2
+python-multipart
+reverse_geocode
+watchfiles
+pydantic-settings

@@ -1,0 +1,390 @@
+/* ── Onboarding Wizard Layout ──────────────────────────────── */
+
+.onboard-wrapper {
+    max-width: 560px;
+    margin: 3rem auto;
+    padding: 0 1.5rem;
+}
+
+.onboard-title {
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 2rem;
+}
+
+.onboard-desc {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 1.25rem;
+}
+
+/* ── Progress Steps ───────────────────────────────────────── */
+
+.onboard-progress {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 2rem;
+}
+
+.progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.step-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: 2px solid var(--border);
+    transition: all 0.2s;
+}
+
+.step-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    transition: color 0.2s;
+}
+
+.progress-step.active .step-number {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+.progress-step.active .step-label {
+    color: var(--primary);
+}
+
+.progress-step.done .step-number {
+    background: var(--success);
+    border-color: var(--success);
+    color: #fff;
+}
+.progress-step.done .step-label {
+    color: var(--success);
+}
+
+.progress-line {
+    width: 40px;
+    height: 2px;
+    background: var(--border);
+    margin: 0 0.4rem;
+    margin-bottom: 1.2rem;
+    transition: background 0.2s;
+}
+.progress-line.done {
+    background: var(--success);
+}
+
+/* ── Step Navigation ──────────────────────────────────────── */
+
+.onboard-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1.25rem;
+}
+
+.onboard-nav-right {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* ── Mode Cards (Purpose + Watch) ────────────────────────── */
+
+.mode-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.mode-card {
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+.mode-card:hover {
+    border-color: var(--text-muted);
+}
+.mode-card.selected {
+    border-color: var(--primary);
+    background: rgba(91, 138, 245, 0.08);
+}
+.mode-card.readonly-locked {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.mode-card-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.mode-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+.mode-card-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+    margin-bottom: 0.5rem;
+}
+
+.mode-card-hint {
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--text-muted);
+    opacity: 0.8;
+}
+
+/* Compact variant (Step 4: Watch mode) */
+.mode-cards-compact {
+    flex-direction: row;
+    gap: 0.75rem;
+}
+.mode-card-compact {
+    padding: 0.75rem 1rem;
+    flex: 1;
+}
+.mode-card-compact .mode-card-title {
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+}
+.mode-card-compact .mode-card-desc {
+    font-size: 0.8rem;
+    margin-bottom: 0;
+}
+
+/* ── Radio Group (Rename mode) ───────────────────────────── */
+
+.radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.radio-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    cursor: pointer;
+    padding: 0.5rem 0;
+}
+
+.radio-label input[type="radio"] {
+    margin-top: 0.25rem;
+    flex-shrink: 0;
+}
+
+.radio-label div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.radio-label strong {
+    font-size: 0.95rem;
+}
+
+.radio-label small {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+/* ── Summary Card ─────────────────────────────────────────── */
+
+.onboard-summary {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin-top: 0.5rem;
+}
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+}
+.summary-row:last-child {
+    border-bottom: none;
+}
+
+.summary-row-clickable {
+    cursor: pointer;
+    transition: background 0.15s;
+    padding: 0.5rem 0.4rem;
+    margin: 0 -0.4rem;
+    border-radius: 4px;
+}
+.summary-row-clickable:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.summary-label {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.summary-value {
+    font-weight: 600;
+}
+
+/* ── Collapsible Auth Section ────────────────────────────── */
+
+.onboard-auth-section {
+    margin-top: 1.25rem;
+}
+
+.onboard-auth-toggle {
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: 0.5rem 0;
+    list-style: none;
+    user-select: none;
+}
+.onboard-auth-toggle::-webkit-details-marker {
+    display: none;
+}
+.onboard-auth-toggle::before {
+    content: "\25B6";
+    display: inline-block;
+    margin-right: 0.5rem;
+    font-size: 0.7rem;
+    transition: transform 0.15s;
+}
+.onboard-auth-section[open] > .onboard-auth-toggle::before {
+    transform: rotate(90deg);
+}
+
+.onboard-auth-body {
+    padding-top: 0.75rem;
+}
+
+.password-match-error {
+    color: var(--error);
+    font-size: 0.8rem;
+}
+
+/* ── Warning Callout ──────────────────────────────────────── */
+
+.onboard-warning {
+    background: #3a2e15;
+    border: 1px solid var(--warning);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--warning);
+}
+
+/* ── Read-Only Notice ────────────────────────────────────── */
+
+.mode-card-readonly-notice {
+    background: #152a3a;
+    border: 1px solid var(--primary);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: #8ec8ff;
+}
+
+/* ── Info Callout (blue) ─────────────────────────────────── */
+
+.onboard-info {
+    background: #152a3a;
+    border: 1px solid var(--primary);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: #8ec8ff;
+}
+
+/* ── Processing Mode Labels ──────────────────────────────── */
+
+.processing-mode-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    cursor: pointer;
+    padding: 0.5rem 0;
+}
+
+.processing-mode-label input[type="checkbox"] {
+    margin-top: 0.2rem;
+    flex-shrink: 0;
+}
+
+.processing-mode-label div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.processing-mode-label strong {
+    font-size: 0.95rem;
+}
+
+.processing-mode-label small {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+/* ── Model Pull Progress ─────────────────────────────────── */
+
+.pull-progress-container {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-input);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.pull-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--primary);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+.pull-progress-bar.pull-error {
+    background: var(--error);
+}
+.pull-status {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.35rem;
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+    .onboard-wrapper { margin: 1.5rem auto; }
+    .onboard-nav-right { flex-direction: column; }
+    .progress-line { width: 20px; }
+    .mode-cards-compact { flex-direction: column; }
+}

@@ -1,0 +1,32 @@
+{% if total_pages is defined and total_pages > 1 %}
+{% set window = 2 %}
+{% set start = [page - window, 1] | max %}
+{% set end = [page + window, total_pages] | min %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ page_url_base }}page={{ page - 1 }}" class="btn btn-sm">&laquo;</a>
+    {% endif %}
+
+    {% if start > 1 %}
+    <a href="{{ page_url_base }}page=1" class="btn btn-sm btn-page">1</a>
+    {% if start > 2 %}<span class="page-ellipsis">&hellip;</span>{% endif %}
+    {% endif %}
+
+    {% for p in range(start, end + 1) %}
+    {% if p == page %}
+    <span class="btn btn-sm btn-page active">{{ p }}</span>
+    {% else %}
+    <a href="{{ page_url_base }}page={{ p }}" class="btn btn-sm btn-page">{{ p }}</a>
+    {% endif %}
+    {% endfor %}
+
+    {% if end < total_pages %}
+    {% if end < total_pages - 1 %}<span class="page-ellipsis">&hellip;</span>{% endif %}
+    <a href="{{ page_url_base }}page={{ total_pages }}" class="btn btn-sm btn-page">{{ total_pages }}</a>
+    {% endif %}
+
+    {% if page < total_pages %}
+    <a href="{{ page_url_base }}page={{ page + 1 }}" class="btn btn-sm">&raquo;</a>
+    {% endif %}
+</div>
+{% endif %}

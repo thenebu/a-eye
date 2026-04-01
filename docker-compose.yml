@@ -1,0 +1,18 @@
+services:
+  a-eye:
+    image: spaceinvaderone/a-eye
+    build: .
+    container_name: a-eye
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_HOST: http://host.docker.internal:11434  # Or use your server's IP
+    volumes:
+      - /path/to/your/photos:/photos
+      - a-eye-data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  a-eye-data:

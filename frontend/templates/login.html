@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - A-Eye</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=63">
+    <style>
+        .login-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .login-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: var(--shadow);
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .login-header img {
+            display: block;
+            margin: 0 auto 0.75rem;
+        }
+        .login-header h1 {
+            font-size: 1.5rem;
+            color: var(--text);
+            margin: 0;
+        }
+        .login-field {
+            margin-bottom: 1.25rem;
+        }
+        .login-field label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+        }
+        .login-field input {
+            width: 100%;
+            padding: 0.6rem 0.75rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .login-field input:focus {
+            border-color: var(--primary);
+        }
+        .login-btn {
+            width: 100%;
+            padding: 0.7rem;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .login-btn:hover {
+            background: var(--primary-hover);
+        }
+        .login-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .login-error {
+            background: rgba(245, 91, 91, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
+            padding: 0.6rem 0.75rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            margin-bottom: 1.25rem;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="login-header">
+                <img src="/static/a-eye-logo.png" alt="" height="48">
+                <h1>A-Eye</h1>
+            </div>
+
+            <div class="login-error" id="login-error"></div>
+
+            <form id="login-form" onsubmit="return doLogin(event)">
+                <div class="login-field">
+                    <label for="login-user">Username</label>
+                    <input type="text" id="login-user" name="username" autocomplete="username" autofocus required>
+                </div>
+                <div class="login-field">
+                    <label for="login-pass">Password</label>
+                    <input type="password" id="login-pass" name="password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="login-btn" id="login-btn">Sign In</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    function doLogin(e) {
+        e.preventDefault();
+        var btn = document.getElementById('login-btn');
+        var errEl = document.getElementById('login-error');
+        var user = document.getElementById('login-user').value;
+        var pass = document.getElementById('login-pass').value;
+
+        btn.disabled = true;
+        btn.textContent = 'Signing in\u2026';
+        errEl.style.display = 'none';
+
+        fetch('/api/login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username: user, password: pass})
+        }).then(function(resp) {
+            if (resp.ok) {
+                window.location.href = '/';
+            } else {
+                return resp.json().then(function(data) {
+                    errEl.textContent = data.detail || 'Invalid credentials';
+                    errEl.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = 'Sign In';
+                });
+            }
+        }).catch(function() {
+            errEl.textContent = 'Connection error. Please try again.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Sign In';
+        });
+
+        return false;
+    }
+    </script>
+</body>
+</html>

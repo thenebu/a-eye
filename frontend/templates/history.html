@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}History - A-Eye{% endblock %}
+
+{% block page_scripts %}
+<script>
+window.DESTRUCTIVE_LIBRARY = {{ 'true' if settings.destructive_mode_library else 'false' }};
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Rename History</h1>
+    <div class="header-actions">
+        {% if not catalogue_mode %}
+        <button class="btn btn-sm" onclick="clearRevertedHistory()">Clear Reverted</button>
+        <button class="btn btn-sm btn-error" onclick="clearAllHistory()">Clear All</button>
+        {% endif %}
+        <a href="/api/history/export?format=csv" class="btn btn-sm" download>Export CSV</a>
+        <a href="/api/history/export?format=json" class="btn btn-sm" download>Export JSON</a>
+    </div>
+</div>
+
+{% if history|length == 0 %}
+<div class="empty-state-large">
+    {% if catalogue_mode %}
+    <h2>No rename history</h2>
+    <p>Catalogue mode does not rename files. History will appear here if you switch to active processing.</p>
+    {% else %}
+    <h2>No rename history</h2>
+    <p>Renamed images will appear here with full undo support.</p>
+    {% endif %}
+</div>
+{% else %}
+
+{% if catalogue_mode %}
+<div style="background: #3a2e15; border: 1px solid var(--warning); border-radius: var(--radius); padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; color: var(--warning);">
+    Revert is unavailable in catalogue mode. Switch to active processing in Settings to undo renames.
+</div>
+{% endif %}
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Thumbnail</th>
+            <th>Time</th>
+            <th>Previous Name</th>
+            <th>Current Name</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for entry in history %}
+        <tr id="history-row-{{ entry.id }}" data-image-id="{{ entry.image_id }}" {% if entry.reverted_at %}class="history-reverted"{% endif %}>
+            <td class="clickable" onclick="openImageModal({{ entry.image_id }})">
+                <img src="/api/images/{{ entry.image_id }}/thumbnail" alt="" class="thumbnail-sm"
+                     loading="lazy" onerror="this.style.display='none'">
+            </td>
+            <td>{{ entry.renamed_at or '' }}</td>
+            <td class="filename history-old-name" title="{{ entry.old_path }}">{{ entry.old_path.split('/')[-1] }}</td>
+            <td class="filename {% if not entry.reverted_at %}history-new-name{% endif %}" title="{{ entry.new_path }}" id="history-newname-{{ entry.id }}">{{ entry.new_path.split('/')[-1] }}</td>
+            <td id="history-status-{{ entry.id }}">
+                {% if entry.reverted_at %}
+                <span class="badge badge-warning">Reverted</span>
+                <br><small class="text-muted">{{ entry.reverted_at }}</small>
+                {% else %}
+                <span class="badge badge-success">Active</span>
+                {% endif %}
+            </td>
+            <td id="history-actions-{{ entry.id }}">
+                {% if not entry.reverted_at and not catalogue_mode %}
+                <button class="btn btn-xs btn-warning" onclick="revertImage({{ entry.id }}, {{ entry.image_id }})">
+                    Revert
+                </button>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Pagination -->
+{% set page_url_base = '/history?' %}
+{% include '_pagination.html' %}
+{% endif %}
+{% endblock %}

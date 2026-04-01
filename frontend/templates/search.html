@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Search - A-Eye{% endblock %}
+
+{% block page_scripts %}
+<script>
+window.DESTRUCTIVE_LIBRARY = {{ 'true' if settings.destructive_mode_library else 'false' }};
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Search Photos</h1>
+</div>
+
+<!-- LLM Banner (shown when no text LLM configured) -->
+{% if not settings.llm_model %}
+<div class="card search-llm-banner" id="llm-banner">
+    <p>You're using basic keyword search. Enable a text LLM for natural-language search.</p>
+    <div class="search-model-select">
+        <select id="llm-model-select" class="input-select">
+            <option value="">Select a text model...</option>
+        </select>
+        <button class="btn btn-sm btn-primary" onclick="saveLLMModel()">Enable</button>
+    </div>
+
+</div>
+{% endif %}
+
+<!-- Search Bar -->
+<div class="search-bar">
+    <input type="text" id="search-input" class="input-text search-input"
+           placeholder="{% if settings.llm_model %}Search with natural language, e.g. 'nighttime photos from London'{% else %}Search by keywords, e.g. 'dog beach sunset'{% endif %}"
+           onkeydown="if(event.key==='Enter')executeSearch()">
+    <button class="btn btn-primary" onclick="executeSearch()" id="search-btn">Search</button>
+</div>
+{% if settings.llm_model %}
+<div class="search-options">
+    <label class="search-toggle-label">
+        <input type="checkbox" id="keyword-only-toggle">
+        <span>Keyword search only</span>
+    </label>
+</div>
+{% endif %}
+
+<!-- Loading Indicator -->
+<div id="search-loading" class="search-loading" style="display:none">
+    <div class="spinner"></div>
+    <span>Searching...</span>
+    <span id="search-tagline" class="tagline-quote"></span>
+</div>
+
+<!-- Search Info -->
+<div id="search-info" style="display:none">
+    <div class="search-results-header">
+        <span id="search-result-count"></span>
+        <span id="search-mode-badge" class="badge"></span>
+    </div>
+
+    <!-- Query Interpretation (collapsible) -->
+    <details id="search-interpretation" style="display:none">
+        <summary>Query interpretation</summary>
+        <pre id="search-interpretation-json"></pre>
+    </details>
+
+    <!-- Relevance Slider -->
+    <div class="search-slider-row">
+        <label for="relevance-slider">Min relevance:</label>
+        <input type="range" id="relevance-slider" min="0" max="100" value="25"
+               oninput="filterByRelevance(this.value)">
+        <span id="relevance-value">25%</span>
+    </div>
+</div>
+
+<!-- Batch Toolbar (shown after search) -->
+<div id="search-toolbar" class="review-toolbar" style="display:none">
+    <button class="btn btn-sm" id="search-select-toggle" onclick="searchToggleSelectAll()">Select All</button>
+    <button class="btn btn-sm btn-primary" id="search-reprocess-selected" onclick="searchReprocessSelected()" disabled>Reprocess Selected</button>
+    <button class="btn btn-sm" id="search-queue-selected" onclick="searchQueueAdd()" disabled>Add to Queue</button>
+    <button class="btn btn-sm" id="search-download-selected" onclick="searchDownloadSelected()" disabled>Download Selected</button>
+    <button class="btn btn-sm btn-error" id="search-delete-selected" onclick="searchDeleteSelected()" disabled>Delete Selected</button>
+    <span class="review-selected-count" id="search-selected-count"></span>
+</div>
+
+<!-- Results Grid -->
+<div id="search-results" class="review-grid"></div>
+
+<!-- No Results -->
+<div id="search-empty" class="empty-state-large" style="display:none">
+    <h2>No results found</h2>
+    <p>Try different keywords or a broader search.</p>
+</div>
+{% endblock %}

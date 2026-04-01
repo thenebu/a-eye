@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}{% if workspace_mode %}Workspace {% endif %}Review - A-Eye{% endblock %}
+
+{% block content %}
+{% if workspace_mode %}
+<script>var API_PREFIX = '{{ api_prefix }}';</script>
+{% endif %}
+
+{% if catalogue_mode and not workspace_mode %}
+<div class="empty-state-large">
+    <h2>Catalogue Mode</h2>
+    <p>Photo renaming is disabled{% if photos_readonly %} (photos directory is read-only){% endif %}.
+       Photos are catalogued automatically with AI descriptions and tags.</p>
+    <p>Use <a href="/search">Search</a> to find photos, or browse
+       <a href="/queue">All Images</a> to see your catalogued library.</p>
+</div>
+{% else %}
+<div class="page-header">
+    <h1>{% if workspace_mode %}Workspace {% endif %}Review Proposed Names</h1>
+    <div class="header-actions">
+        <div class="source-toggle">
+            <a href="/review" class="btn btn-sm {% if not workspace_mode %}btn-primary{% endif %}">Library</a>
+            <a href="/review?source=workspace" class="btn btn-sm {% if workspace_mode %}btn-primary{% endif %}">Workspace</a>
+        </div>
+        <span class="badge">{{ total }} awaiting review</span>
+    </div>
+</div>
+
+{% if workspace_mode %}
+<div class="workspace-banner">Temporary Workspace — files will not be kept on the server</div>
+{% endif %}
+
+{% if images|length > 0 %}
+<div class="review-toolbar">
+    <button class="btn btn-sm" id="review-select-toggle" onclick="reviewToggleSelectAll()">Select All</button>
+    <button class="btn btn-sm btn-success" id="review-approve-selected" onclick="reviewApproveSelected()" disabled>Approve Selected</button>
+    <button class="btn btn-sm btn-muted" id="review-skip-selected" onclick="reviewSkipSelected()" disabled>Skip Selected</button>
+    <button class="btn btn-sm btn-primary" id="review-reprocess-selected" onclick="reviewReprocessSelected()" disabled>Reprocess Selected</button>
+    <span class="review-selected-count" id="review-selected-count"></span>
+    <div style="margin-left: auto;">
+        {% if total > 0 %}
+        <button class="btn btn-sm btn-success" onclick="approveAllProposed({{ total }})">Approve All ({{ total }})</button>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if images|length == 0 %}
+<div class="empty-state-large">
+    <h2>Nothing to review</h2>
+    {% if workspace_mode %}
+    <p>No proposed images in the workspace. Upload files from the Dashboard.</p>
+    <a href="/" class="btn btn-primary">Go to Dashboard</a>
+    {% else %}
+    <p>All images have been processed. Scan for new photos or check the All Images page.</p>
+    <a href="/" class="btn btn-primary">Go to Dashboard</a>
+    {% endif %}
+</div>
+{% else %}
+
+<div class="review-grid">
+    {% for image in images %}
+    <div class="review-card" id="review-card-{{ image.id }}" data-image-id="{{ image.id }}" data-context="{{ image.processing_context or '' }}">
+        <div class="review-image">
+            <input type="checkbox" class="image-checkbox review-checkbox" value="{{ image.id }}" onchange="reviewUpdateToolbar()">
+            <img src="{{ api_prefix|default('/api') }}/images/{{ image.id }}/thumbnail" alt="{{ image.original_filename }}"
+                 loading="lazy" onerror="this.src='/static/css/placeholder.svg'"
+                 onclick="openImageModal({{ image.id }})">
+        </div>
+        <div class="review-body">
+            <div class="review-original">
+                <label>Original:</label>
+                <span class="filename">{{ image.original_filename }}</span>
+            </div>
+
+            <div class="review-proposed">
+                <label>Proposed:</label>
+                <input type="text" class="input-proposed" id="proposed-{{ image.id }}"
+                       value="{{ image.final_filename or '' }}">
+            </div>
+
+            <div class="review-meta">
+                {% if image.exif_date %}
+                <span class="meta-badge">{{ image.exif_date }}</span>
+                {% endif %}
+                {% if image.location_name %}
+                <span class="meta-badge">{{ image.location_name }}</span>
+                {% endif %}
+                {% if image.camera_model %}
+                <span class="meta-badge">{{ image.camera_model }}</span>
+                {% endif %}
+                {% if image.confidence_score is not none %}
+                <span class="meta-badge confidence-{{ 'high' if image.confidence_score >= 0.7 else ('medium' if image.confidence_score >= 0.4 else 'low') }}">
+                    {{ "%.0f"|format(image.confidence_score * 100) }}% confidence
+                </span>
+                {% endif %}
+            </div>
+
+            {% if image.vision_description %}
+            <details class="review-description">
+                <summary>AI Description</summary>
+                <p>{{ image.vision_description }}</p>
+            </details>
+            {% endif %}
+
+            {% if image.processing_context %}
+            <details class="review-description">
+                <summary>Processing Context</summary>
+                <p class="text-muted">{{ image.processing_context }}</p>
+            </details>
+            {% endif %}
+
+            <div class="review-actions">
+                <button class="btn btn-success" onclick="approveImage({{ image.id }})">Approve</button>
+                <button class="btn btn-primary" onclick="reviewReprocess({{ image.id }})">Reprocess</button>
+            </div>
+            <div class="review-actions-secondary">
+                {% if workspace_mode %}
+                <button class="btn btn-sm btn-error" onclick="wsDeleteOne({{ image.id }})">Delete</button>
+                {% else %}
+                <button class="btn btn-sm btn-error" onclick="trashOne({{ image.id }})">Delete</button>
+                {% endif %}
+                <button class="btn btn-sm btn-muted" onclick="reviewSkip({{ image.id }})">Skip</button>
+                <a href="{{ api_prefix|default('/api') }}/images/{{ image.id }}/file?download=true" class="btn btn-sm" download>Download</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% set page_url_base = '/review?' + ('source=workspace&' if source == 'workspace' else '') %}
+{% include '_pagination.html' %}
+
+{% endif %}
+{% endif %}{# end catalogue_mode check #}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+window.DESTRUCTIVE_LIBRARY = {{ 'true' if settings.destructive_mode_library else 'false' }};
+window.DESTRUCTIVE_WORKSPACE = {{ 'true' if settings.destructive_mode_workspace else 'false' }};
+</script>
+{% endblock %}

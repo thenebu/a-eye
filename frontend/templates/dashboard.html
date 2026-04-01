@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - A-Eye{% endblock %}
+
+{% block page_scripts %}
+<script>
+window.DESTRUCTIVE_LIBRARY = {{ 'true' if settings.destructive_mode_library else 'false' }};
+// Hide splash immediately if already shown this session (runs before app.js)
+if (sessionStorage.getItem('splash_shown')) {
+    var _so = document.getElementById('splash-overlay');
+    if (_so) _so.style.display = 'none';
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<!-- Splash Screen (first visit per session) -->
+<div id="splash-overlay" class="splash-overlay visible">
+    <div class="splash-content">
+        <img src="/static/sio.png" alt="SpaceInvaderOne" height="60">
+        <p id="splash-quote" class="splash-quote"></p>
+        <img src="/static/a-eye-logo-splash.png" alt="A-Eye" height="60">
+    </div>
+</div>
+
+<div class="page-header">
+    <h1>Dashboard</h1>
+</div>
+
+<!-- Stats Row 1: Pipeline counts -->
+<div class="stats-grid-3">
+    <a href="/queue" class="stat-card stat-card-lg stat-card-link">
+        <div class="stat-number" id="stat-total">{{ stats.get('total', 0) }}</div>
+        <div class="stat-label">Total Scanned</div>
+    </a>
+    <div class="stat-card stat-card-lg stat-processed">
+        <div class="stat-number" id="stat-processed">{{ outcomes.get('processed', 0) }}</div>
+        <div class="stat-label">Processed</div>
+    </div>
+    <a href="/queue?status=error" class="stat-card stat-card-lg stat-error stat-card-link">
+        <div class="stat-number" id="stat-errors">{{ stats.get('error', 0) }}</div>
+        <div class="stat-label">Errors</div>
+    </a>
+</div>
+
+<!-- Stats Row 2: Outcome counts -->
+<div class="stats-grid-3 stats-outcomes">
+    {% if catalogue_mode %}
+    <div class="stat-card stat-card-lg stat-renamed">
+        <div class="stat-number" id="stat-catalogued">{{ outcomes.get('catalogued', 0) }}</div>
+        <div class="stat-label">Photos Catalogued</div>
+    </div>
+    {% else %}
+    <a href="/history" class="stat-card stat-card-lg stat-renamed stat-card-link">
+        <div class="stat-number" id="stat-renamed">{{ outcomes.get('renamed', 0) }}</div>
+        <div class="stat-label">Photos Renamed</div>
+    </a>
+    {% endif %}
+    <div class="stat-card stat-card-lg stat-descriptions">
+        <div class="stat-number" id="stat-descriptions">{{ outcomes.get('descriptions_written', 0) }}</div>
+        <div class="stat-label">XMP Descriptions</div>
+    </div>
+    <div class="stat-card stat-card-lg stat-tags">
+        <div class="stat-number" id="stat-tags">{{ outcomes.get('tags_written', 0) }}</div>
+        <div class="stat-label">XMP Tags</div>
+    </div>
+</div>
+
+<!-- Review Banner (shown when proposed > 0, hidden in catalogue mode) -->
+<div class="review-banner" id="review-banner"
+     {% if catalogue_mode or not stats.get('proposed', 0) %}style="display:none"{% endif %}>
+    <span><strong id="review-count">{{ stats.get('proposed', 0) }}</strong> images ready for review</span>
+    <a href="/review" class="btn btn-sm btn-primary">Go to Review</a>
+</div>
+
+<!-- Processing Progress (active) -->
+<div class="card" id="progress-active" style="display: none;">
+    <h3>Processing Progress</h3>
+    <div class="progress-bar-container">
+        <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+    </div>
+    <p class="progress-text" id="progress-text">Calculating...</p>
+</div>
+
+<!-- Processing Progress (idle) -->
+<div class="card card-collapsible" id="progress-idle">
+    <div class="card-summary" onclick="toggleIdleFolders()">
+        <h3>Idle — no images queued</h3>
+        <div class="card-summary-actions">
+            <button class="btn btn-sm" id="schedule-btn"
+                    onclick="event.stopPropagation(); toggleSchedulePanel()">Schedule</button>
+            <button class="btn btn-sm" id="folders-btn"
+                    onclick="event.stopPropagation(); toggleIdleFolders()">Show Folders</button>
+            <button class="btn btn-sm btn-context" id="advanced-scan-btn"
+                    onclick="event.stopPropagation(); toggleAdvancedScan()">Scan with Context</button>
+            <button class="btn btn-sm btn-primary" id="scan-now-btn" hx-post="/api/scan" hx-swap="none"
+                    onclick="event.stopPropagation(); showToast('Scan started...')">Scan Now</button>
+        </div>
+    </div>
+    <div class="card-collapse-body" id="idle-body" style="display:none">
+        <!-- Advanced Scan Panel -->
+        <div id="advanced-scan-panel" style="display:none">
+            <div class="schedule-panel-content">
+                <label>Context for new images</label>
+                <textarea id="advanced-scan-context" rows="2" style="width:100%;margin:0.25rem 0"
+                          placeholder="e.g. Holiday to Crete 2021, or The grey husky is named Jax"
+                          maxlength="500"></textarea>
+                <div style="display:flex;gap:0.5rem;margin-top:0.25rem">
+                    <button class="btn btn-sm btn-context" onclick="scanWithContext()">Scan with Context</button>
+                    <button class="btn btn-sm" onclick="hideAdvancedScan()">Cancel</button>
+                </div>
+                <small class="text-muted">Context will be applied to all newly-discovered images in this scan.</small>
+            </div>
+        </div>
+        <!-- Schedule Status (shown when schedule is active, updated by polling) -->
+        <div id="schedule-status" style="display:none" class="schedule-status-bar">
+            <span id="schedule-status-text"></span>
+        </div>
+        <!-- Schedule Config Panel -->
+        <div id="schedule-panel" style="display:none">
+            <div class="schedule-panel-content">
+                <label class="search-toggle-label">
+                    <input type="checkbox" id="dash-schedule-enabled"
+                           {% if settings.schedule_enabled %}checked{% endif %}>
+                    <span>Enable scheduled processing</span>
+                </label>
+                <div class="schedule-times">
+                    <label>Start
+                        <input type="time" id="dash-schedule-start"
+                               value="{{ settings.schedule_start }}">
+                    </label>
+                    <label>End
+                        <input type="time" id="dash-schedule-end"
+                               value="{{ settings.schedule_end }}">
+                    </label>
+                    <button class="btn btn-sm btn-primary" onclick="saveSchedule()">Save</button>
+                </div>
+                <small class="text-muted">Worker processes images only during this daily time window.</small>
+            </div>
+        </div>
+        <!-- Folder Tree -->
+        <div id="folder-tree-panel" style="display:none">
+            <div class="folder-tree-panel-header">
+                <small class="text-muted">Uncheck folders to exclude them from scanning.</small>
+                <button class="btn btn-xs" onclick="refreshFolderTree()">Refresh</button>
+            </div>
+            <div id="folder-tree-container" class="folder-tree-container">
+                <div class="folder-tree-loading">Loading folder tree...</div>
+            </div>
+            <div id="folder-tree-empty" style="display:none">
+                <p class="text-muted">No subdirectories found in photos directory.</p>
+            </div>
+            <input type="hidden" id="excluded_folders" value="{{ settings.excluded_folders }}">
+        </div>
+    </div>
+</div>
+
+<!-- Currently Processing (live thumbnails, hidden when idle) -->
+<div class="card" id="active-card" style="display: none;">
+    <h3>Currently Processing</h3>
+    <div class="active-images" id="active-images"></div>
+</div>
+
+{% if not catalogue_mode %}
+<!-- Upload to Library (collapsible) -->
+<details class="card card-collapsible">
+    <summary class="card-summary"><h3>Upload to Library</h3></summary>
+    <div class="card-collapse-body">
+        <div class="upload-zone" id="upload-drop-zone">
+            <p class="upload-zone-text">Drag &amp; drop images here, or click to browse</p>
+            <input type="file" id="upload-file-input" multiple accept="image/*" style="display:none">
+            <button class="btn btn-sm btn-primary" onclick="document.getElementById('upload-file-input').click()">Choose Files</button>
+            <input type="hidden" id="upload-subfolder" value="">
+            <div class="upload-folder-row">
+                <span class="upload-folder-label" id="upload-folder-label">/ (root)</span>
+                <button class="btn btn-xs" id="upload-tree-btn" onclick="toggleUploadTree()">Change Folder</button>
+                <button class="btn btn-xs" onclick="toggleNewFolder()">+ New Folder</button>
+            </div>
+            <div id="upload-tree-panel" style="display:none">
+                <div id="upload-tree-container" class="folder-tree-container upload-tree-container"></div>
+            </div>
+            <div id="new-folder-form" style="display:none" class="new-folder-form">
+                <span class="new-folder-parent" id="new-folder-parent">/</span>
+                <input type="text" id="new-folder-name" placeholder="folder name" class="new-folder-input"
+                       onkeydown="if(event.key==='Enter')createNewFolder()">
+                <button class="btn btn-xs btn-primary" onclick="createNewFolder()">Create</button>
+                <button class="btn btn-xs" onclick="toggleNewFolder()">Cancel</button>
+            </div>
+        </div>
+        <div id="upload-progress" style="display:none" class="upload-progress">
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="upload-progress-bar" style="width:0%"></div>
+            </div>
+        </div>
+    </div>
+</details>
+{% endif %}
+
+<!-- Temporary Workspace (collapsible) -->
+<details class="card card-collapsible card-workspace" id="workspace-card">
+    <summary class="card-summary">
+        <h3>Temporary Workspace</h3>
+        <span class="card-summary-badge" id="ws-summary-badge"></span>
+    </summary>
+    <div class="card-collapse-body">
+        <div id="ws-empty">
+            <p class="text-muted">Upload files for temporary processing. Rename and download — nothing stays on the server.</p>
+            <div class="upload-zone" id="ws-drop-zone">
+                <p class="upload-zone-text">Drop files here for temporary processing</p>
+                <input type="file" id="ws-file-input" multiple accept="image/*" style="display:none">
+                <button class="btn btn-sm btn-primary" onclick="document.getElementById('ws-file-input').click()">Upload to Workspace</button>
+            </div>
+        </div>
+        <div id="ws-active" style="display:none">
+            <div id="ws-status" class="ws-status-line"></div>
+            <p class="text-muted" id="ws-stats"></p>
+            <div class="upload-zone" id="ws-drop-zone-active" style="margin-bottom:0.5rem">
+                <p class="upload-zone-text" style="font-size:0.8rem">Drop more files to add</p>
+                <input type="file" id="ws-file-input-active" multiple accept="image/*" style="display:none">
+                <button class="btn btn-xs" onclick="document.getElementById('ws-file-input-active').click()">Add Files</button>
+            </div>
+            <div id="ws-actions" class="ws-actions"></div>
+        </div>
+        <div id="ws-upload-progress" style="display:none" class="upload-progress">
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="ws-upload-progress-bar" style="width:0%"></div>
+            </div>
+        </div>
+    </div>
+</details>
+
+<!-- Worker Status (compact bar) -->
+<div class="worker-bar" id="worker-status">
+    <span><strong>Worker:</strong> <span id="worker-running">Loading...</span></span>
+    <span>Processing: <span id="worker-in-flight">0</span></span>
+    <span>Queue: <span id="worker-pending">0</span></span>
+    <span>Done: <span id="worker-processed">0</span></span>
+    <span>Errors: <span id="worker-errors">0</span></span>
+    <span id="worker-scanning"></span>
+</div>
+
+{% if settings.dashboard_showcase %}
+<!-- Photo Showcase -->
+<div class="card" id="showcase-section">
+    <h3>Photo Showcase</h3>
+    <div id="showcase-grid" class="showcase-grid" data-tag="{{ settings.dashboard_showcase_tag }}" data-interval="{{ settings.dashboard_showcase_interval }}" data-kenburns="{{ 'true' if settings.dashboard_showcase_kenburns else 'false' }}" data-crossfade="{{ settings.dashboard_crossfade_speed }}"></div>
+</div>
+{% endif %}
+{% endblock %}

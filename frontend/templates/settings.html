@@ -1,0 +1,570 @@
+{% extends "base.html" %}
+{% block title %}Settings - A-Eye{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Settings</h1>
+</div>
+
+<div class="settings-page">
+
+    {% if photos_readonly %}
+    <div class="settings-readonly-notice">
+        Photos directory is mounted read-only. Renaming, XMP sidecar writing, and destructive operations are unavailable.
+    </div>
+    {% endif %}
+
+    <!-- ── Section 1: AI & Models ──────────────────────────────── -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">AI & Models</h2>
+        <div class="settings-section-grid settings-grid-2col">
+            <!-- Ollama Connection -->
+            <div class="settings-group">
+                <h3>Ollama Connection</h3>
+                <div class="form-group">
+                    <label for="ollama_host">Ollama Host URL</label>
+                    <div class="input-with-button">
+                        <input type="text" id="ollama_host" value="{{ settings.ollama_host }}">
+                        <button class="btn btn-sm" id="test-connection-btn" onclick="loadModels()">
+                            Load Models
+                        </button>
+                    </div>
+                    <div id="connection-result"></div>
+                </div>
+                <div class="form-group">
+                    <label for="vision_model">Vision Model (required)</label>
+                    <select id="vision_model" data-current="{{ settings.vision_model }}">
+                        <option value="" disabled selected>Loading models...</option>
+                    </select>
+                    <small>Analyses photos, generates descriptions, and suggests filenames. Must support image input.</small>
+                </div>
+                <div class="form-group">
+                    <label for="llm_model">Text LLM for Search (optional)</label>
+                    <select id="llm_model" data-current="{{ settings.llm_model }}">
+                        <option value="">None &mdash; keyword search only</option>
+                    </select>
+                    <small>Enables natural-language search queries. Without this, search uses basic keyword matching.</small>
+                </div>
+            </div>
+
+            <!-- Processing Modes -->
+            <div class="settings-group {% if photos_readonly %}settings-disabled{% endif %}">
+                <h3>Processing Modes</h3>
+                {% if photos_readonly %}<small class="text-muted">Disabled — photos directory is read-only</small>{% endif %}
+                <div class="form-group">
+                    <label class="processing-mode-label">
+                        <input type="checkbox" id="catalogue_mode"
+                               {% if settings.catalogue_mode %}checked{% endif %}
+                               {% if photos_readonly %}disabled{% endif %}
+                               onchange="toggleCatalogueMode()">
+                        <div>
+                            <strong>Catalogue Mode</strong>
+                            <small>AI-catalogue only — no file renaming or XMP sidecar writing to disk</small>
+                        </div>
+                    </label>
+                </div>
+                <hr style="border-color: var(--border); margin: 0.5rem 0;">
+                <div class="form-group">
+                    <label class="processing-mode-label">
+                        <input type="checkbox" id="process_rename"
+                               {% if settings.process_rename %}checked{% endif %}
+                               {% if photos_readonly or settings.catalogue_mode %}disabled{% endif %}
+                               onchange="validateProcessingModes()">
+                        <div>
+                            <strong>Rename Files</strong>
+                            <small>AI-powered descriptive file renaming</small>
+                        </div>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="processing-mode-label">
+                        <input type="checkbox" id="process_write_description"
+                               {% if settings.process_write_description %}checked{% endif %}
+                               {% if photos_readonly or settings.catalogue_mode %}disabled{% endif %}
+                               onchange="validateProcessingModes()">
+                        <div>
+                            <strong>Write AI Description to Metadata</strong>
+                            <small>XMP sidecar — searchable in Immich, Lightroom, etc.</small>
+                        </div>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="processing-mode-label">
+                        <input type="checkbox" id="process_write_tags"
+                               {% if settings.process_write_tags %}checked{% endif %}
+                               {% if photos_readonly or settings.catalogue_mode %}disabled{% endif %}
+                               onchange="validateProcessingModes()">
+                        <div>
+                            <strong>Write AI Tags to Metadata</strong>
+                            <small>Keyword tags in XMP sidecar for searchability</small>
+                        </div>
+                    </label>
+                </div>
+                <small id="processing-mode-error" class="password-match-error" style="display:none">
+                    At least one processing mode must be enabled.
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Section 1b: Prompt Library (Advanced) ──────────────── -->
+    <details class="settings-section settings-collapsible" id="prompt-library-section">
+        <summary class="settings-section-title settings-section-summary">
+            Advanced: Prompt Library
+            <small class="settings-subtitle">Customise the prompts sent to AI models</small>
+        </summary>
+        <div class="settings-section-body">
+
+            <!-- Vision Prompt (primary) -->
+            <div class="prompt-section" id="prompt-section-vision">
+                <h3>Vision Prompt</h3>
+                <small class="text-muted">The main prompt sent to the AI model when processing photos</small>
+
+                <div class="form-group" style="margin-top: 0.75rem">
+                    <label for="prompt-select-vision">Active Prompt</label>
+                    <div class="input-with-button">
+                        <select id="prompt-select-vision" onchange="viewPrompt(this.value)">
+                            <option value="">Loading...</option>
+                        </select>
+                        <button class="btn btn-sm btn-primary" onclick="activateSelectedPrompt('vision')">Activate</button>
+                    </div>
+                </div>
+
+                <div class="prompt-viewer" id="prompt-viewer-vision">
+                    <div class="prompt-viewer-toolbar">
+                        <span class="prompt-viewer-label" id="prompt-label-vision"></span>
+                        <div class="prompt-viewer-actions">
+                            <button class="btn btn-sm" onclick="copyPromptToClipboard('vision')" title="Copy to clipboard">Copy</button>
+                            <button class="btn btn-sm" onclick="downloadPromptMarkdown('vision')" title="Download as .md">Download</button>
+                            <button class="btn btn-sm btn-primary" id="prompt-save-btn-vision" onclick="savePrompt('vision')" style="display:none">Save</button>
+                            <button class="btn btn-sm btn-error" id="prompt-delete-btn-vision" onclick="deletePromptById('vision')" style="display:none">Delete</button>
+                        </div>
+                    </div>
+                    <textarea class="prompt-editor" id="prompt-editor-vision" rows="16" readonly></textarea>
+                </div>
+
+                <div class="prompt-add-bar">
+                    <button class="btn btn-sm" onclick="showAddPromptForm('vision')">+ Add Custom Prompt</button>
+                </div>
+
+                <div class="prompt-add-form" id="prompt-add-form-vision" style="display:none">
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input type="text" id="prompt-add-name-vision" placeholder="e.g. Wildlife Photography">
+                    </div>
+                    <div class="form-group">
+                        <label>Prompt Template</label>
+                        <textarea id="prompt-add-content-vision" rows="12" placeholder="Paste or write your prompt template here..."></textarea>
+                    </div>
+                    <div class="prompt-add-actions">
+                        <button class="btn btn-sm btn-primary" onclick="createPrompt('vision')">Save</button>
+                        <button class="btn btn-sm" onclick="hideAddPromptForm('vision')">Cancel</button>
+                    </div>
+                    <small class="prompt-add-error" id="prompt-add-error-vision" style="display:none"></small>
+                </div>
+            </div>
+
+            <!-- Context Injection Template (secondary, nested) -->
+            <details class="prompt-section prompt-section-nested" id="prompt-section-context">
+                <summary class="prompt-nested-summary">
+                    Context Injection Template
+                    <small class="settings-subtitle">Injected into the vision prompt when you provide processing context</small>
+                </summary>
+                <div class="prompt-nested-body">
+                    <div class="form-group" style="margin-top: 0.75rem">
+                        <label for="prompt-select-context_injection">Active Template</label>
+                        <div class="input-with-button">
+                            <select id="prompt-select-context_injection" onchange="viewPrompt(this.value)">
+                                <option value="">Loading...</option>
+                            </select>
+                            <button class="btn btn-sm btn-primary" onclick="activateSelectedPrompt('context_injection')">Activate</button>
+                        </div>
+                    </div>
+
+                    <div class="prompt-viewer" id="prompt-viewer-context_injection">
+                        <div class="prompt-viewer-toolbar">
+                            <span class="prompt-viewer-label" id="prompt-label-context_injection"></span>
+                            <div class="prompt-viewer-actions">
+                                <button class="btn btn-sm" onclick="copyPromptToClipboard('context_injection')" title="Copy to clipboard">Copy</button>
+                                <button class="btn btn-sm" onclick="downloadPromptMarkdown('context_injection')" title="Download as .md">Download</button>
+                                <button class="btn btn-sm btn-primary" id="prompt-save-btn-context_injection" onclick="savePrompt('context_injection')" style="display:none">Save</button>
+                                <button class="btn btn-sm btn-error" id="prompt-delete-btn-context_injection" onclick="deletePromptById('context_injection')" style="display:none">Delete</button>
+                            </div>
+                        </div>
+                        <textarea class="prompt-editor" id="prompt-editor-context_injection" rows="8" readonly></textarea>
+                    </div>
+
+                    <div class="prompt-add-bar">
+                        <button class="btn btn-sm" onclick="showAddPromptForm('context_injection')">+ Add Custom Template</button>
+                    </div>
+
+                    <div class="prompt-add-form" id="prompt-add-form-context_injection" style="display:none">
+                        <div class="form-group">
+                            <label>Name</label>
+                            <input type="text" id="prompt-add-name-context_injection" placeholder="e.g. Detailed Context">
+                        </div>
+                        <div class="form-group">
+                            <label>Template</label>
+                            <textarea id="prompt-add-content-context_injection" rows="8" placeholder="Paste or write your context injection template here..."></textarea>
+                        </div>
+                        <div class="prompt-add-actions">
+                            <button class="btn btn-sm btn-primary" onclick="createPrompt('context_injection')">Save</button>
+                            <button class="btn btn-sm" onclick="hideAddPromptForm('context_injection')">Cancel</button>
+                        </div>
+                        <small class="prompt-add-error" id="prompt-add-error-context_injection" style="display:none"></small>
+                    </div>
+                </div>
+            </details>
+
+            <!-- AI Helper -->
+            <div class="prompt-ai-helper-bar">
+                <button class="btn btn-sm btn-primary" onclick="showAiHelperModal()">Need a custom prompt? Create with AI</button>
+            </div>
+
+        </div>
+    </details>
+
+    <!-- ── Section 2: Rename & Filenames ───────────────────────── -->
+    <div class="settings-section {% if photos_readonly %}settings-disabled{% endif %}">
+        <h2 class="settings-section-title">Rename & Filenames</h2>
+        <div class="settings-section-grid settings-grid-3col">
+            <!-- Rename Mode -->
+            <div class="settings-group" id="card-rename-mode">
+                <h3>Rename Mode</h3>
+                <div class="form-group">
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="rename_mode" value="review"
+                                   {% if settings.rename_mode == 'review' %}checked{% endif %}>
+                            <strong>Review</strong> — Propose names, wait for approval
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="rename_mode" value="auto"
+                                   {% if settings.rename_mode == 'auto' %}checked{% endif %}>
+                            <strong>Auto</strong> — Rename immediately, revert via History
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="rename_mode" value="auto-low-confidence"
+                                   {% if settings.rename_mode == 'auto-low-confidence' %}checked{% endif %}>
+                            <strong>Auto (Low Confidence Review)</strong> — Auto-rename confident results, flag uncertain ones
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="confidence_threshold">Confidence Threshold</label>
+                    <input type="range" id="confidence_threshold" min="0" max="1" step="0.05"
+                           value="{{ settings.confidence_threshold }}"
+                           oninput="document.getElementById('threshold-display').textContent = this.value">
+                    <span id="threshold-display">{{ settings.confidence_threshold }}</span>
+                    <small>For auto-low-confidence mode: below this threshold triggers review</small>
+                </div>
+            </div>
+
+            <!-- Filename Template -->
+            <div class="settings-group" id="card-filename-template">
+                <h3>Filename Template</h3>
+                <div class="form-group">
+                    <label for="filename_template">Template</label>
+                    <input type="text" id="filename_template" value="{{ settings.filename_template }}">
+                    <small>Placeholders: {date}, {location}, {description}, {camera}</small>
+                </div>
+                <div class="form-group">
+                    <label for="filename_case">Case</label>
+                    <select id="filename_case">
+                        <option value="lower" {% if settings.filename_case == 'lower' %}selected{% endif %}>lowercase</option>
+                        <option value="title" {% if settings.filename_case == 'title' %}selected{% endif %}>Title Case</option>
+                        <option value="original" {% if settings.filename_case == 'original' %}selected{% endif %}>Original</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="max_filename_len">Max Length</label>
+                    <input type="number" id="max_filename_len" value="{{ settings.max_filename_len }}" min="20" max="255">
+                </div>
+            </div>
+
+            <!-- Metadata Options -->
+            <div class="settings-group">
+                <h3>Metadata Options</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="use_exif_date" {% if settings.use_exif_date %}checked{% endif %}>
+                        Use EXIF date in filenames
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="use_gps" {% if settings.use_gps %}checked{% endif %}>
+                        Extract and reverse-geocode GPS coordinates
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="gps_detail">GPS Detail Level</label>
+                    <select id="gps_detail">
+                        <option value="city" {% if settings.gps_detail == 'city' %}selected{% endif %}>City</option>
+                        <option value="city-country" {% if settings.gps_detail == 'city-country' %}selected{% endif %}>City, Country</option>
+                        <option value="full" {% if settings.gps_detail == 'full' %}selected{% endif %}>Full</option>
+                        <option value="coordinates" {% if settings.gps_detail == 'coordinates' %}selected{% endif %}>Coordinates</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Section 3: Scanning & Scheduling ────────────────────── -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">Scanning & Scheduling</h2>
+        <div class="settings-section-grid settings-grid-3col">
+            <!-- Watch Mode -->
+            <div class="settings-group">
+                <h3>Watch Mode</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="watch_mode" {% if settings.watch_mode %}checked{% endif %}>
+                        Enable watch mode — detect new files via filesystem events
+                    </label>
+                    <small>Uses OS-level notifications (inotify/FSEvents) for instant detection. Use manual Scan for a full directory walk.</small>
+                </div>
+            </div>
+
+            <!-- Processing -->
+            <div class="settings-group">
+                <h3>Processing</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="process_subdirs" {% if settings.process_subdirs %}checked{% endif %}>
+                        Process subdirectories
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="concurrent_workers">Concurrent Workers</label>
+                    <select id="concurrent_workers">
+                        <option value="1" {% if settings.concurrent_workers == 1 %}selected{% endif %}>1</option>
+                        <option value="2" {% if settings.concurrent_workers == 2 %}selected{% endif %}>2</option>
+                        <option value="3" {% if settings.concurrent_workers == 3 %}selected{% endif %}>3</option>
+                        <option value="4" {% if settings.concurrent_workers == 4 %}selected{% endif %}>4</option>
+                    </select>
+                    <small>Be careful with VRAM — more workers = more parallel model calls</small>
+                </div>
+            </div>
+
+            <!-- Schedule -->
+            <div class="settings-group">
+                <h3>Schedule</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="schedule_enabled"
+                               {% if settings.schedule_enabled %}checked{% endif %}>
+                        Enable scheduled processing
+                    </label>
+                    <small>Only process during a daily time window</small>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="schedule_start">Start</label>
+                        <input type="time" id="schedule_start" value="{{ settings.schedule_start }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="schedule_end">End</label>
+                        <input type="time" id="schedule_end" value="{{ settings.schedule_end }}">
+                    </div>
+                </div>
+                <small>Scans still discover new files anytime.</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Section 3b: Dashboard ─────────────────────────────── -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">Dashboard</h2>
+        <div class="settings-group">
+            <h3>Photo Showcase</h3>
+            <small>Display two random photos at the bottom of the dashboard. Refreshes on each page load.</small>
+            <div class="form-group" style="margin-top:0.75rem">
+                <label>
+                    <input type="checkbox" id="dashboard_showcase"
+                           {% if settings.dashboard_showcase %}checked{% endif %}>
+                    Enable photo showcase on dashboard
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="dashboard_showcase_tag">Filter by tag (optional)</label>
+                <input type="text" id="dashboard_showcase_tag"
+                       value="{{ settings.dashboard_showcase_tag }}"
+                       placeholder="e.g. dogs, landscape, family">
+                <small>Leave empty to show any processed photo at random.</small>
+            </div>
+            <div class="form-group">
+                <label for="dashboard_showcase_interval">
+                    Showcase rotate interval: <strong><span id="interval-display">{{ settings.dashboard_showcase_interval }}</span>s</strong>
+                </label>
+                <input type="range" id="dashboard_showcase_interval" min="5" max="60" step="1"
+                       value="{{ settings.dashboard_showcase_interval }}"
+                       oninput="document.getElementById('interval-display').textContent = this.value; updateMosaicCalc();">
+                <small>How often each showcase photo changes.</small>
+            </div>
+            <div class="form-group">
+                <label for="dashboard_mosaic_speed">
+                    Mosaic speed: <strong><span id="mosaic-speed-display">{{ settings.dashboard_mosaic_speed }}</span>x faster</strong>
+                    <span class="text-muted">(<span id="mosaic-calc">{{ (settings.dashboard_showcase_interval // settings.dashboard_mosaic_speed) if settings.dashboard_mosaic_speed > 0 else settings.dashboard_showcase_interval }}</span>s per tile)</span>
+                </label>
+                <input type="range" id="dashboard_mosaic_speed" min="1" max="10" step="1"
+                       value="{{ settings.dashboard_mosaic_speed }}"
+                       oninput="document.getElementById('mosaic-speed-display').textContent = this.value; updateMosaicCalc();">
+                <small>How many times faster tiles change on the mosaic vs the showcase.</small>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="dashboard_showcase_kenburns"
+                           {% if settings.dashboard_showcase_kenburns %}checked{% endif %}>
+                    Enable Ken Burns effect (slow zoom & pan)
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="dashboard_crossfade_speed">
+                    Crossfade speed: <strong><span id="crossfade-display">{{ settings.dashboard_crossfade_speed }}</span>s</strong>
+                    <span class="text-muted" id="crossfade-label"></span>
+                </label>
+                <input type="range" id="dashboard_crossfade_speed" min="1" max="4" step="0.5"
+                       value="{{ settings.dashboard_crossfade_speed }}"
+                       oninput="updateCrossfadeLabel(this.value);">
+                <small>How long each photo dissolves into the next.</small>
+            </div>
+            <script>
+            function updateMosaicCalc() {
+                var interval = parseInt(document.getElementById('dashboard_showcase_interval').value) || 15;
+                var speed = parseInt(document.getElementById('dashboard_mosaic_speed').value) || 3;
+                var calc = document.getElementById('mosaic-calc');
+                if (calc) calc.textContent = Math.max(1, Math.round(interval / speed));
+            }
+            function updateCrossfadeLabel(val) {
+                var v = parseFloat(val);
+                document.getElementById('crossfade-display').textContent = v.toFixed(1);
+                var label = v <= 1 ? 'Fast' : v <= 2.5 ? 'Medium' : 'Slow';
+                document.getElementById('crossfade-label').textContent = '(' + label + ')';
+            }
+            updateCrossfadeLabel(document.getElementById('dashboard_crossfade_speed').value);
+            </script>
+        </div>
+    </div>
+
+    <!-- ── Section 4: Storage & Security ───────────────────────── -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">Storage & Security</h2>
+        <div class="settings-section-grid settings-grid-2col">
+            <!-- Thumbnails -->
+            <div class="settings-group">
+                <h3>Thumbnails</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="thumbnail_max_size">Max Size (px)</label>
+                        <input type="number" id="thumbnail_max_size" value="{{ settings.thumbnail_max_size }}" min="100" max="800">
+                    </div>
+                    <div class="form-group">
+                        <label for="thumbnail_quality">JPEG Quality</label>
+                        <input type="number" id="thumbnail_quality" value="{{ settings.thumbnail_quality }}" min="10" max="100">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <button class="btn btn-warning" hx-post="/api/thumbnails/clear" hx-swap="none"
+                            onclick="if(!confirm('Clear all thumbnails? They will regenerate on next view.')) return false; showToast('Thumbnails cleared')">
+                        Clear Thumbnail Cache
+                    </button>
+                    <button class="btn btn-sm" hx-post="/api/thumbnails/prune" hx-swap="none"
+                            onclick="showToast('Pruning orphaned thumbnails...')">
+                        Prune Orphaned
+                    </button>
+                </div>
+            </div>
+
+            <!-- Destructive Mode -->
+            <div class="settings-group">
+                <h3>Destructive Mode</h3>
+                <small>Controls whether delete and trash operations are available. Disable to prevent accidental data loss.</small>
+                <div class="form-group" style="margin-top:0.75rem">
+                    <label class="processing-mode-label">
+                        <input type="checkbox" id="destructive_mode_library"
+                               {% if settings.destructive_mode_library %}checked{% endif %}
+                               {% if photos_readonly %}disabled{% endif %}>
+                        <div>
+                            <strong>Library</strong>
+                            <small>Allow trashing and permanently deleting library photos{% if photos_readonly %} (unavailable — read-only){% endif %}</small>
+                        </div>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="processing-mode-label">
+                        <input type="checkbox" id="destructive_mode_workspace"
+                               {% if settings.destructive_mode_workspace %}checked{% endif %}>
+                        <div>
+                            <strong>Workspace</strong>
+                            <small>Allow deleting workspace photos (enabled by default for triage)</small>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Security -->
+            <div class="settings-group">
+                <h3>Security</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="auth_enabled"
+                               {% if settings.basic_auth_user and settings.basic_auth_pass %}checked{% endif %}
+                               onchange="toggleAuthFields()">
+                        Enable password protection
+                    </label>
+                </div>
+                <div id="auth-fields" style="{% if not settings.basic_auth_user or not settings.basic_auth_pass %}display:none{% endif %}">
+                    <div class="form-group">
+                        <label for="settings_auth_user">Username</label>
+                        <input type="text" id="settings_auth_user" value="{{ settings.basic_auth_user or 'admin' }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="settings_auth_pass">New Password</label>
+                        <input type="password" id="settings_auth_pass" placeholder="Enter new password" oninput="settingsCheckPassword()">
+                        <div class="password-strength" id="settings-strength" style="display:none">
+                            <div class="strength-bar">
+                                <div class="strength-fill" id="settings-strength-fill"></div>
+                            </div>
+                            <span class="strength-label" id="settings-strength-label"></span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="settings_auth_pass_confirm">Confirm Password</label>
+                        <input type="password" id="settings_auth_pass_confirm" placeholder="Confirm password" oninput="settingsCheckPassword()">
+                        <small class="password-match-error" id="settings-match-error" style="display:none">Passwords do not match</small>
+                    </div>
+                    <small>Leave password fields empty to keep the current password.</small>
+                </div>
+            </div>
+
+            <!-- Database Management -->
+            <div class="settings-group">
+                <h3>Database Management</h3>
+                <div class="form-group">
+                    <button class="btn btn-primary" onclick="backupDatabase()">Backup Database</button>
+                    <small>Saves to backups folder and downloads a copy</small>
+                </div>
+                <div id="backup-list"></div>
+                <hr style="border-color: var(--border); margin: 0.75rem 0;">
+                <div class="form-group">
+                    <button class="btn" onclick="verifyLibrary()">Verify Library</button>
+                    <small>Check database records against files on disk</small>
+                </div>
+                <div id="verify-results" style="display:none"></div>
+                <hr style="border-color: var(--border); margin: 0.75rem 0;">
+                <div class="form-group">
+                    <button class="btn btn-warning" onclick="restoreDatabase()">Restore Database</button>
+                    <small>Restore from a backup — current data will be replaced</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save -->
+    <div class="settings-save">
+        <button class="btn btn-primary btn-lg" onclick="saveSettings()">Save Settings</button>
+    </div>
+
+</div>
+{% endblock %}
