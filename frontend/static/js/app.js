@@ -1935,6 +1935,9 @@ function openImageModal(imageId, skipCollect) {
         var downloadBtn = document.getElementById('modal-download-btn');
         if (downloadBtn) downloadBtn.href = API_PREFIX + '/images/' + imageId + '/file?download=true';
 
+        // Load faces for this image
+        _loadModalFaces(imageId);
+
         var modal = document.getElementById('image-modal');
         modal.dataset.imageId = imageId;
         modal.dataset.context = data.processing_context || '';
@@ -2784,6 +2787,8 @@ function saveSettings() {
         'dashboard_showcase_kenburns',
         'dashboard_mosaic_speed',
         'dashboard_crossfade_speed',
+        'face_recognition_enabled', 'face_backend', 'face_api_url',
+        'face_detection_model', 'face_match_tolerance', 'face_names_in_filename',
     ];
 
     fields.forEach(f => {
@@ -3926,3 +3931,104 @@ function clearWorkspace() {
         setTimeout(function() { overlay.style.display = 'none'; }, 800);
     }, 6000);
 })();
+
+/* ── Face Recognition in Modal ──────────────────────────────── */
+
+var _allPersons = null;
+
+function _loadModalFaces(imageId) {
+    var section = document.getElementById('modal-faces-section');
+    var list = document.getElementById('modal-faces-list');
+    if (!section || !list) return;
+
+    section.style.display = 'none';
+    list.innerHTML = '';
+
+    fetch(API_PREFIX + '/images/' + imageId + '/faces')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var faces = data.faces || [];
+        if (faces.length === 0) return;
+
+        section.style.display = '';
+        list.innerHTML = faces.map(function(f) {
+            var name = f.person_name || 'Unknown';
+            var dist = f.match_distance != null ? ' (' + (f.match_distance * 100).toFixed(0) + '% dist)' : '';
+            return '<div class="face-item">' +
+                '<img src="' + API_PREFIX + '/faces/' + f.id + '/crop" alt="Face">' +
+                '<div class="face-item-info">' +
+                '<div class="face-item-name">' + _escapeHtml(name) + dist + '</div>' +
+                '<div class="face-item-meta">' +
+                '<select onchange="_assignFace(' + f.id + ', this.value)" data-face-id="' + f.id + '">' +
+                '<option value="">-- Assign person --</option>' +
+                '</select> ' +
+                (f.person_id && !f.is_reference ?
+                    '<button class="btn btn-sm" onclick="_setFaceRef(' + f.id + ')">Set as Reference</button>' : '') +
+                '</div>' +
+                '</div>' +
+                '</div>';
+        }).join('');
+
+        // Load persons for dropdowns
+        _ensurePersonsLoaded(function(persons) {
+            var selects = list.querySelectorAll('select');
+            selects.forEach(function(sel) {
+                var faceId = parseInt(sel.dataset.faceId);
+                var face = faces.find(function(f) { return f.id === faceId; });
+                persons.forEach(function(p) {
+                    var opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    if (face && face.person_id === p.id) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+            });
+        });
+    })
+    .catch(function() { /* face recognition might be disabled */ });
+}
+
+function _ensurePersonsLoaded(cb) {
+    if (_allPersons) { cb(_allPersons); return; }
+    fetch('/api/persons')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        _allPersons = data.persons || [];
+        cb(_allPersons);
+    })
+    .catch(function() { cb([]); });
+}
+
+function _assignFace(faceId, personId) {
+    if (!personId) return;
+    fetch(API_PREFIX + '/faces/' + faceId + '/identify', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({person_id: parseInt(personId)})
+    })
+    .then(function(r) {
+        if (r.ok) {
+            showToast('Face assigned', 'success');
+            var imgId = document.getElementById('image-modal').dataset.imageId;
+            _loadModalFaces(parseInt(imgId));
+        }
+    });
+}
+
+function _setFaceRef(faceId) {
+    fetch(API_PREFIX + '/faces/' + faceId + '/set-reference', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({is_reference: true})
+    })
+    .then(function(r) {
+        if (r.ok) showToast('Marked as reference face', 'success');
+        else showToast('Failed — assign to a person first', 'error');
+    });
+}
+
+function _escapeHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}

@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}People - A-Eye{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>People</h1>
+    <button class="btn btn-primary" onclick="showAddPersonModal()">Add Person</button>
+</div>
+
+<!-- Face Recognition Status -->
+<div id="face-status" class="card" style="margin-bottom:1rem">
+    <div class="meta-row">
+        <span class="meta-label">Backend</span>
+        <span id="face-backend-status">Checking...</span>
+    </div>
+    <div id="face-stats" class="meta-row" style="display:none">
+        <span class="meta-label">Stats</span>
+        <span id="face-stats-text"></span>
+    </div>
+</div>
+
+<!-- Persons Grid -->
+<div id="persons-grid" class="persons-grid"></div>
+
+<!-- Empty State -->
+<div id="persons-empty" class="empty-state-large" style="display:none">
+    <h2>No people added yet</h2>
+    <p>Add a person to start recognizing faces in your photos.</p>
+</div>
+
+<!-- Loading -->
+<div id="persons-loading" class="search-loading">
+    <div class="spinner"></div>
+    <span>Loading people...</span>
+</div>
+
+<!-- Add/Edit Person Modal -->
+<div id="person-modal" class="confirm-overlay" style="display:none">
+    <div class="confirm-dialog" style="max-width:400px">
+        <h3 id="person-modal-title">Add Person</h3>
+        <div style="margin:1rem 0">
+            <label class="meta-label">Name</label>
+            <input type="text" id="person-name" class="input-text" placeholder="Name" style="width:100%">
+        </div>
+        <div style="margin:1rem 0">
+            <label class="meta-label">Birthday (optional)</label>
+            <input type="date" id="person-birthday" class="input-text" style="width:100%">
+        </div>
+        <div style="margin:1rem 0">
+            <label class="meta-label">Notes (optional)</label>
+            <textarea id="person-notes" class="input-text" rows="2" style="width:100%" placeholder="Any notes..."></textarea>
+        </div>
+        <div class="confirm-actions">
+            <button class="btn" onclick="closePersonModal()">Cancel</button>
+            <button class="btn btn-primary" id="person-modal-save" onclick="savePerson()">Save</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+let editingPersonId = null;
+
+async function loadPersons() {
+    try {
+        const resp = await fetch('/api/persons');
+        const data = await resp.json();
+        const grid = document.getElementById('persons-grid');
+        const empty = document.getElementById('persons-empty');
+        const loading = document.getElementById('persons-loading');
+        loading.style.display = 'none';
+
+        if (!data.persons || data.persons.length === 0) {
+            empty.style.display = 'block';
+            grid.innerHTML = '';
+            return;
+        }
+        empty.style.display = 'none';
+
+        grid.innerHTML = data.persons.map(p => {
+            const age = p.birthday ? calculateAge(p.birthday) : null;
+            const ageText = age !== null ? ` (${age})` : '';
+            return `
+                <div class="person-card" onclick="window.location='/persons/${p.id}'">
+                    <div class="person-avatar">${p.name.charAt(0).toUpperCase()}</div>
+                    <div class="person-info">
+                        <div class="person-name">${escapeHtml(p.name)}${ageText}</div>
+                        <div class="person-meta">
+                            ${p.photo_count || 0} photo${(p.photo_count||0) !== 1 ? 's' : ''}
+                            &middot; ${p.reference_count || 0} reference${(p.reference_count||0) !== 1 ? 's' : ''}
+                        </div>
+                        ${p.birthday ? `<div class="person-meta">${p.birthday}</div>` : ''}
+                    </div>
+                    <div class="person-actions">
+                        <button class="btn btn-sm" onclick="event.stopPropagation(); editPerson(${p.id}, '${escapeHtml(p.name)}', '${p.birthday||''}', '${escapeHtml(p.notes||'')}')">Edit</button>
+                        <button class="btn btn-sm btn-error" onclick="event.stopPropagation(); deletePerson(${p.id}, '${escapeHtml(p.name)}')">Delete</button>
+                    </div>
+                </div>`;
+        }).join('');
+    } catch(e) {
+        console.error('Failed to load persons:', e);
+    }
+}
+
+async function loadFaceStatus() {
+    try {
+        const resp = await fetch('/api/faces/health');
+        const data = await resp.json();
+        const el = document.getElementById('face-backend-status');
+        if (data.status === 'ok') {
+            el.innerHTML = `<span class="badge badge-success">${data.backend || 'local'}</span> Connected`;
+        } else if (data.status === 'disabled') {
+            el.innerHTML = '<span class="badge">Disabled</span> Enable in Settings';
+        } else {
+            el.innerHTML = `<span class="badge badge-error">Error</span> ${data.error || 'Unknown'}`;
+        }
+    } catch(e) {
+        document.getElementById('face-backend-status').textContent = 'Error connecting';
+    }
+}
+
+function calculateAge(birthday) {
+    const bd = new Date(birthday);
+    const today = new Date();
+    let age = today.getFullYear() - bd.getFullYear();
+    if (today.getMonth() < bd.getMonth() || (today.getMonth() === bd.getMonth() && today.getDate() < bd.getDate())) age--;
+    return age;
+}
+
+function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+}
+
+function showAddPersonModal() {
+    editingPersonId = null;
+    document.getElementById('person-modal-title').textContent = 'Add Person';
+    document.getElementById('person-name').value = '';
+    document.getElementById('person-birthday').value = '';
+    document.getElementById('person-notes').value = '';
+    document.getElementById('person-modal').style.display = 'flex';
+    document.getElementById('person-name').focus();
+}
+
+function editPerson(id, name, birthday, notes) {
+    editingPersonId = id;
+    document.getElementById('person-modal-title').textContent = 'Edit Person';
+    document.getElementById('person-name').value = name;
+    document.getElementById('person-birthday').value = birthday;
+    document.getElementById('person-notes').value = notes;
+    document.getElementById('person-modal').style.display = 'flex';
+    document.getElementById('person-name').focus();
+}
+
+function closePersonModal() {
+    document.getElementById('person-modal').style.display = 'none';
+    editingPersonId = null;
+}
+
+async function savePerson() {
+    const name = document.getElementById('person-name').value.trim();
+    if (!name) { alert('Name is required'); return; }
+    const body = {
+        name,
+        birthday: document.getElementById('person-birthday').value || null,
+        notes: document.getElementById('person-notes').value || null,
+    };
+    try {
+        let resp;
+        if (editingPersonId) {
+            resp = await fetch(`/api/persons/${editingPersonId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+        } else {
+            resp = await fetch('/api/persons', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+        }
+        if (resp.ok) {
+            closePersonModal();
+            loadPersons();
+        } else {
+            const err = await resp.json();
+            alert(err.detail || 'Failed to save');
+        }
+    } catch(e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function deletePerson(id, name) {
+    if (!confirm(`Delete person "${name}"? Their faces will become unidentified.`)) return;
+    try {
+        const resp = await fetch(`/api/persons/${id}`, {method:'DELETE'});
+        if (resp.ok) loadPersons();
+    } catch(e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+// Init
+loadPersons();
+loadFaceStatus();
+</script>
+{% endblock %}

@@ -24,3 +24,5 @@ class PipelineResult:
     ai_tags: list[str] = field(default_factory=list)
     quality_flags: list[str] = field(default_factory=list)
     error: str | None = None
+    face_detections: list = field(default_factory=list)
+    person_names: list[str] = field(default_factory=list)

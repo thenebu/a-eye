@@ -14,6 +14,8 @@ from backend.database import (
     insert_rename_history,
     update_image,
 )
+from backend.face_client import FaceClient
+from backend.face_db import insert_image_face
 from backend.filename import ensure_unique
 from backend.ollama_client import OllamaClient
 from backend.date_extract import extract_date_from_text
@@ -31,10 +33,12 @@ class WorkerQueue:
         db: aiosqlite.Connection,
         settings: Settings,
         ollama: OllamaClient,
+        face_client: FaceClient | None = None,
     ) -> None:
         self.db = db
         self.settings = settings
         self.ollama = ollama
+        self.face_client = face_client
         self._queue: asyncio.Queue[int] = asyncio.Queue()
         self._tasks: list[asyncio.Task] = []
         self._running = False
@@ -213,6 +217,8 @@ class WorkerQueue:
         result = await process_image(
             file_path, self.settings, self.ollama,
             processing_context=image.get("processing_context"),
+            db=self.db,
+            face_client=self.face_client,
         )
 
         if result.error:
@@ -259,6 +265,20 @@ class WorkerQueue:
             if extracted:
                 update_fields["exif_date"] = extracted
                 logger.info("Image %d: extracted date %s from AI text", image_id, extracted)
+
+        # Persist face detection results
+        if result.face_detections:
+            for det in result.face_detections:
+                try:
+                    await insert_image_face(
+                        self.db, image_id,
+                        person_id=det.person_id,
+                        encoding=det.encoding,
+                        bbox=det.bbox,
+                        match_distance=det.match_distance,
+                    )
+                except Exception as exc:
+                    logger.error("Failed to save face for image %d: %s", image_id, exc)
 
         # Decide what to do based on rename mode
         if self.settings.process_rename and not self.settings.catalogue_mode:

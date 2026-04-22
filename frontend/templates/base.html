@@ -19,6 +19,9 @@
             <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
             <a href="/review" class="nav-link {% if request.url.path == '/review' %}active{% endif %}">Review</a>
             <a href="/search" class="nav-link {% if request.url.path == '/search' %}active{% endif %}">Search</a>
+            {% if settings.face_recognition_enabled %}
+            <a href="/persons" class="nav-link {% if request.url.path.startswith('/persons') %}active{% endif %}">People</a>
+            {% endif %}
             <a href="/queue" class="nav-link {% if request.url.path == '/queue' %}active{% endif %}">All Images</a>
             <a href="/history" class="nav-link {% if request.url.path == '/history' %}active{% endif %}">History</a>
             <a href="/settings" class="nav-link {% if request.url.path == '/settings' %}active{% endif %}">Settings</a>
@@ -94,6 +97,11 @@
                     <div id="modal-context-section" style="display:none">
                         <h3>Processing Context</h3>
                         <p id="modal-context" class="text-muted"></p>
+                    </div>
+
+                    <div id="modal-faces-section" style="display:none">
+                        <h3>People in this Photo</h3>
+                        <div id="modal-faces-list" class="faces-grid"></div>
                     </div>
 
                     <div id="modal-description-section" style="display:none">

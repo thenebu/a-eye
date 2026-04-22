@@ -1,0 +1,14 @@
+services:
+  face-api:
+    build: .
+    ports:
+      - "8100:8100"
+    restart: unless-stopped
+    # Uncomment for GPU support (NVIDIA):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]

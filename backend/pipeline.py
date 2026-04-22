@@ -3,8 +3,12 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import aiosqlite
+
 from backend.config import Settings
 from backend.confidence import score_confidence
+from backend.face_client import FaceClient
+from backend.faces import load_known_encodings, match_face
 from backend.filename import render_template, sanitize_filename
 from backend.geocode import reverse_geocode_location
 from backend.metadata import extract_metadata
@@ -19,6 +23,8 @@ async def process_image(
     settings: Settings,
     ollama: OllamaClient,
     processing_context: str | None = None,
+    db: aiosqlite.Connection | None = None,
+    face_client: FaceClient | None = None,
 ) -> PipelineResult:
     """Run the full rename pipeline on a single image.
 
@@ -78,6 +84,35 @@ async def process_image(
         result.error = str(exc)
         return result
 
+    # ── Stage 3: Face Recognition (optional) ────────────────────────────
+
+    persons_str = None
+    if settings.face_recognition_enabled and face_client and db:
+        try:
+            detections = await face_client.detect(file_path)
+            if detections:
+                known = await load_known_encodings(db)
+                for det in detections:
+                    pid, pname, dist = match_face(
+                        det.encoding, known, settings.face_match_tolerance,
+                    )
+                    det.person_id = pid
+                    det.person_name = pname
+                    det.match_distance = dist
+                result.face_detections = detections
+                result.person_names = [
+                    d.person_name for d in detections if d.person_name
+                ]
+                # Build persons string for filename
+                if result.person_names and settings.face_names_in_filename:
+                    persons_str = sanitize_filename(
+                        "-".join(result.person_names[:3]),
+                        max_len=40,
+                        case=settings.filename_case,
+                    )
+        except Exception as exc:
+            logger.error("Face recognition failed for %s: %s", file_path, exc)
+
     # ── Filename assembly (skip when rename disabled) ──────────────────────
 
     if settings.process_rename and raw_name:
@@ -100,6 +135,7 @@ async def process_image(
             location=sanitized_location,
             description=sanitized_description,
             camera=None,  # Camera is rarely useful in filenames
+            persons=persons_str,
         )
 
         # Final sanitization pass on the assembled name

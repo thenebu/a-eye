@@ -266,7 +266,7 @@
                 <div class="form-group">
                     <label for="filename_template">Template</label>
                     <input type="text" id="filename_template" value="{{ settings.filename_template }}">
-                    <small>Placeholders: {date}, {location}, {description}, {camera}</small>
+                    <small>Placeholders: {date}, {location}, {description}, {camera}, {persons}</small>
                 </div>
                 <div class="form-group">
                     <label for="filename_case">Case</label>
@@ -305,6 +305,72 @@
                         <option value="full" {% if settings.gps_detail == 'full' %}selected{% endif %}>Full</option>
                         <option value="coordinates" {% if settings.gps_detail == 'coordinates' %}selected{% endif %}>Coordinates</option>
                     </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Section 2b: Face Recognition ─────────────────────────── -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">Face Recognition</h2>
+        <div class="settings-section-grid settings-grid-3col">
+            <!-- Enable / Backend -->
+            <div class="settings-group">
+                <h3>Backend</h3>
+                <div class="form-group">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="face_recognition_enabled"
+                               {% if settings.face_recognition_enabled %}checked{% endif %}>
+                        <span>Enable face recognition</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="face_backend">Backend</label>
+                    <select id="face_backend">
+                        <option value="local" {% if settings.face_backend == 'local' %}selected{% endif %}>Local (dlib in container)</option>
+                        <option value="remote" {% if settings.face_backend == 'remote' %}selected{% endif %}>Remote (external API)</option>
+                    </select>
+                </div>
+                <div class="form-group" id="face-api-url-group" {% if settings.face_backend != 'remote' %}style="display:none"{% endif %}>
+                    <label for="face_api_url">Face API URL</label>
+                    <input type="text" id="face_api_url" value="{{ settings.face_api_url }}" placeholder="http://gpu-server:8100">
+                </div>
+                <button class="btn btn-sm" onclick="testFaceConnection()">Test Connection</button>
+                <span id="face-test-result" style="margin-left:0.5rem"></span>
+            </div>
+
+            <!-- Detection Settings -->
+            <div class="settings-group">
+                <h3>Detection</h3>
+                <div class="form-group">
+                    <label for="face_detection_model">Detection Model</label>
+                    <select id="face_detection_model">
+                        <option value="hog" {% if settings.face_detection_model == 'hog' %}selected{% endif %}>HOG (fast, CPU)</option>
+                        <option value="cnn" {% if settings.face_detection_model == 'cnn' %}selected{% endif %}>CNN (accurate, GPU recommended)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="face_match_tolerance">Match Tolerance</label>
+                    <input type="range" id="face_match_tolerance" min="0.3" max="0.8" step="0.05"
+                           value="{{ settings.face_match_tolerance }}"
+                           oninput="document.getElementById('face-tol-val').textContent=this.value">
+                    <small>Current: <span id="face-tol-val">{{ settings.face_match_tolerance }}</span> (lower = stricter)</small>
+                </div>
+            </div>
+
+            <!-- Filename Integration -->
+            <div class="settings-group">
+                <h3>Filename Integration</h3>
+                <div class="form-group">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="face_names_in_filename"
+                               {% if settings.face_names_in_filename %}checked{% endif %}>
+                        <span>Include person names in filenames</span>
+                    </label>
+                    <small>Uses the {persons} placeholder in your filename template</small>
+                </div>
+                <div class="form-group">
+                    <a href="/persons" class="btn btn-sm btn-primary">Manage People</a>
                 </div>
             </div>
         </div>
@@ -567,4 +633,30 @@
     </div>
 
 </div>
+
+<script>
+// Toggle face API URL visibility based on backend selection
+document.getElementById('face_backend').addEventListener('change', function() {
+    document.getElementById('face-api-url-group').style.display =
+        this.value === 'remote' ? '' : 'none';
+});
+
+async function testFaceConnection() {
+    var result = document.getElementById('face-test-result');
+    result.textContent = 'Testing...';
+    try {
+        var resp = await fetch('/api/faces/health');
+        var data = await resp.json();
+        if (data.status === 'ok') {
+            result.innerHTML = '<span style="color:var(--success)">Connected (' + (data.backend||'') + ')</span>';
+        } else if (data.status === 'disabled') {
+            result.innerHTML = '<span style="color:var(--warning)">Disabled</span>';
+        } else {
+            result.innerHTML = '<span style="color:var(--error)">Error: ' + (data.error||'Unknown') + '</span>';
+        }
+    } catch(e) {
+        result.innerHTML = '<span style="color:var(--error)">Connection failed</span>';
+    }
+}
+</script>
 {% endblock %}

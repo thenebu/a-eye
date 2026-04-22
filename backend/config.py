@@ -84,6 +84,14 @@ class Settings(BaseSettings):
     dashboard_mosaic_speed: int = 3  # multiplier: mosaic changes N times faster than showcase
     dashboard_crossfade_speed: float = 2.0  # seconds: 1=fast, 2=medium, 4=slow
 
+    # -- Face Recognition --
+    face_recognition_enabled: bool = False
+    face_backend: str = "local"            # local | remote
+    face_api_url: str = ""                 # URL for remote face API (e.g. http://gpu-server:8100)
+    face_detection_model: str = "hog"      # hog | cnn
+    face_match_tolerance: float = 0.6      # euclidean distance threshold (lower = stricter)
+    face_names_in_filename: bool = True    # include person names via {persons} placeholder
+
     # -- Thumbnails --
     thumbnail_max_size: int = 400
     thumbnail_quality: int = 80
@@ -131,6 +139,24 @@ class Settings(BaseSettings):
         if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", v):
             logger.warning("Invalid schedule time '%s', defaulting to '00:00'", v)
             return "00:00"
+        return v
+
+    @field_validator("face_backend", mode="before")
+    @classmethod
+    def _validate_face_backend(cls, v: str) -> str:
+        valid = {"local", "remote"}
+        if v not in valid:
+            logger.warning("Invalid face_backend '%s', defaulting to 'local'", v)
+            return "local"
+        return v
+
+    @field_validator("face_detection_model", mode="before")
+    @classmethod
+    def _validate_face_detection_model(cls, v: str) -> str:
+        valid = {"hog", "cnn"}
+        if v not in valid:
+            logger.warning("Invalid face_detection_model '%s', defaulting to 'hog'", v)
+            return "hog"
         return v
 
     @field_validator("concurrent_workers", mode="before")

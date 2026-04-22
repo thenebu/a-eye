@@ -64,10 +64,37 @@ CREATE TABLE IF NOT EXISTS prompts (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS persons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    birthday TEXT,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS image_faces (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+    person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL,
+    encoding BLOB NOT NULL,
+    bbox_x INTEGER,
+    bbox_y INTEGER,
+    bbox_w INTEGER,
+    bbox_h INTEGER,
+    match_distance REAL,
+    is_reference INTEGER NOT NULL DEFAULT 0,
+    confirmed INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_images_status ON images(status);
 CREATE INDEX IF NOT EXISTS idx_images_file_hash ON images(file_hash);
 CREATE INDEX IF NOT EXISTS idx_images_file_path ON images(file_path);
 CREATE INDEX IF NOT EXISTS idx_rename_history_image_id ON rename_history(image_id);
+CREATE INDEX IF NOT EXISTS idx_image_faces_image_id ON image_faces(image_id);
+CREATE INDEX IF NOT EXISTS idx_image_faces_person_id ON image_faces(person_id);
+CREATE INDEX IF NOT EXISTS idx_persons_name ON persons(name);
 """
 
 

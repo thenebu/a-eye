@@ -7,6 +7,8 @@ from typing import Any
 
 import aiosqlite
 
+from backend.face_db import get_person_by_name
+from backend.faces import age_to_date_range
 from backend.ollama_client import OllamaClient
 
 logger = logging.getLogger(__name__)
@@ -26,6 +28,9 @@ Filter fields (exact match only):
 - exif_date: date in YYYY-MM-DD format
 - quality_flags: image quality issues (blurry, accidental, overexposed, underexposed, low-resolution)
 - status: processing status (pending, processing, proposed, renamed, skipped, error, trashed)
+- person_name: name of a recognized person in the photo (use when the query mentions a specific person)
+- person_age_min: minimum age of a person at the time the photo was taken (integer, use with person_name)
+- person_age_max: maximum age of a person at the time the photo was taken (integer, use with person_name)
 
 Rules for generating keywords:
 1. Always include the literal search terms from the query
@@ -34,11 +39,18 @@ Rules for generating keywords:
 4. Generate 4-6 keywords total. Never return fewer than 4.
 5. Do NOT put dates or years in the keywords array. Dates belong ONLY in date_from/date_to.
 6. If the query is purely about a time period with no visual content (e.g. "photos from 2019"), return an EMPTY keywords array and only set date_from/date_to.
+7. When the query mentions a person by name, put the name in person_name, NOT in keywords.
+8. When the query mentions an age or age range for a person, use person_age_min and person_age_max.
 
 Example: "puppy" → keywords: ["puppy", "dog", "canine", "pet"], date_from: null
 Example: "sunset beach" → keywords: ["sunset", "beach", "coast", "ocean", "shore"], date_from: null
 Example: "photos from 2019" → keywords: [], date_from: "2019-01-01", date_to: "2019-12-31"
 Example: "cats 2020" → keywords: ["cat", "cats", "kitten", "feline"], date_from: "2020-01-01", date_to: "2020-12-31"
+Example: "photos of Beatrice" → keywords: [], person_name: "Beatrice"
+Example: "Beatrice at the beach" → keywords: ["beach", "coast", "ocean", "shore"], person_name: "Beatrice"
+Example: "Beatrice when she was 4-5" → keywords: [], person_name: "Beatrice", person_age_min: 4, person_age_max: 5
+Example: "Beatrice als sie 4 Jahre alt war" → keywords: [], person_name: "Beatrice", person_age_min: 4, person_age_max: 4
+Example: "Fotos von Max am Strand" → keywords: ["beach", "coast", "ocean", "shore"], person_name: "Max"
 
 Do NOT return any fields beyond the schema below.
 Return ONLY this JSON, no explanation:
@@ -47,7 +59,10 @@ Return ONLY this JSON, no explanation:
   "date_from": "YYYY-MM-DD" or null,
   "date_to": "YYYY-MM-DD" or null,
   "quality_flags": [] or null,
-  "status": null
+  "status": null,
+  "person_name": "Name" or null,
+  "person_age_min": integer or null,
+  "person_age_max": integer or null
 }"""
 
 
@@ -89,7 +104,8 @@ async def _llm_search(
         interpretation = _parse_search_json(raw)
 
         # Merge any non-schema fields the LLM invented into keywords
-        _SCHEMA_KEYS = {"keywords", "date_from", "date_to", "quality_flags", "status"}
+        _SCHEMA_KEYS = {"keywords", "date_from", "date_to", "quality_flags", "status",
+                        "person_name", "person_age_min", "person_age_max"}
         kws = list(interpretation.get("keywords", []))
         for key in list(interpretation.keys()):
             if key in _SCHEMA_KEYS:
@@ -110,6 +126,26 @@ async def _llm_search(
         if interpretation.get("date_from") or interpretation.get("date_to"):
             expanded = [kw for kw in expanded if not _is_date_token(kw)]
         interpretation["keywords"] = list(dict.fromkeys(expanded))  # dedupe, preserve order
+
+        # Convert person age range to date range using birthday
+        person_name = interpretation.get("person_name")
+        age_min = interpretation.get("person_age_min")
+        age_max = interpretation.get("person_age_max")
+        if person_name and (age_min is not None or age_max is not None):
+            person = await get_person_by_name(db, person_name)
+            if person and person.get("birthday"):
+                date_from, date_to = age_to_date_range(
+                    person["birthday"],
+                    int(age_min) if age_min is not None else None,
+                    int(age_max) if age_max is not None else None,
+                )
+                if date_from and not interpretation.get("date_from"):
+                    interpretation["date_from"] = date_from
+                if date_to and not interpretation.get("date_to"):
+                    interpretation["date_to"] = date_to
+                logger.info("Age %s-%s for %s (born %s) → dates %s to %s",
+                            age_min, age_max, person_name, person["birthday"],
+                            date_from, date_to)
 
         logger.info("Search interpretation for %r: %s", query, interpretation)
     except Exception as exc:
@@ -146,7 +182,15 @@ async def _structured_search(
     if not keywords:
         return {"results": [], "mode": "structured", "query_interpretation": {"keywords": []}}
 
-    interpretation = {"keywords": keywords}
+    # Extract person:Name syntax for structured search
+    interpretation: dict[str, Any] = {}
+    remaining_keywords = []
+    for kw in keywords:
+        if kw.startswith("person:"):
+            interpretation["person_name"] = kw[7:]
+        else:
+            remaining_keywords.append(kw)
+    interpretation["keywords"] = remaining_keywords
     conditions, params = _build_sql_conditions(interpretation)
 
     results = await _execute_search(db, conditions, params, limit)
@@ -242,6 +286,15 @@ def _build_sql_conditions(interpretation: dict[str, Any]) -> tuple[list[str], di
     if interpretation.get("status"):
         conditions.append("status = :status")
         params["status"] = interpretation["status"]
+
+    # Person name filter (via image_faces JOIN)
+    if interpretation.get("person_name"):
+        conditions.append(
+            "id IN (SELECT f.image_id FROM image_faces f "
+            "JOIN persons p ON f.person_id = p.id "
+            "WHERE LOWER(p.name) LIKE :person_name)"
+        )
+        params["person_name"] = f"%{interpretation['person_name'].lower()}%"
 
     # Exclude trashed by default (unless specifically searching for trashed)
     if interpretation.get("status") != "trashed":

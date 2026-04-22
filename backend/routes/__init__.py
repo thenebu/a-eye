@@ -14,6 +14,8 @@ from backend.routes.workspace import router as workspace_router
 from backend.routes.prompts import router as prompts_router
 from backend.routes.database import router as database_router
 from backend.routes.queue import router as queue_router
+from backend.routes.persons import router as persons_router
+from backend.routes.faces import router as faces_router
 
 
 def create_api_router() -> APIRouter:
@@ -32,4 +34,6 @@ def create_api_router() -> APIRouter:
     api.include_router(prompts_router, tags=["prompts"])
     api.include_router(database_router, tags=["database"])
     api.include_router(queue_router, tags=["queue"])
+    api.include_router(persons_router, tags=["persons"])
+    api.include_router(faces_router, tags=["faces"])
     return api

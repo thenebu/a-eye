@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}{{ person.name }} - A-Eye{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <a href="/persons" class="btn btn-sm">&larr; All People</a>
+        <h1 style="display:inline; margin-left:0.5rem">{{ person.name }}</h1>
+        {% if person.birthday %}
+        <span class="text-muted" style="margin-left:0.5rem">{{ person.birthday }}
+            {% if age is not none %} ({{ age }} years){% endif %}
+        </span>
+        {% endif %}
+    </div>
+    <div>
+        <button class="btn btn-sm" onclick="editPersonInline()">Edit</button>
+        <button class="btn btn-sm btn-primary" onclick="detectFacesForPerson()">Detect Faces in Photos</button>
+    </div>
+</div>
+
+{% if person.notes %}
+<p class="text-muted">{{ person.notes }}</p>
+{% endif %}
+
+<!-- Reference Faces -->
+<div class="card" style="margin-bottom:1rem">
+    <h3>Reference Faces <span class="text-muted" id="ref-count">({{ reference_count }})</span></h3>
+    <p class="text-muted">These face encodings are used to recognize {{ person.name }} in new photos.</p>
+    <div id="reference-faces" class="faces-grid">
+        {% if reference_faces %}
+        {% for face in reference_faces %}
+        <div class="face-thumb">
+            <img src="/api/faces/{{ face.id }}/crop" alt="Reference face" loading="lazy">
+            <button class="btn btn-sm btn-error face-remove-btn" onclick="removeReference({{ face.id }})" title="Remove reference">&times;</button>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="text-muted">No reference faces yet. Detect faces in photos, then mark them as references.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Photos of this person -->
+<div class="card">
+    <h3>Photos <span class="text-muted">({{ photo_count }})</span></h3>
+    <div id="person-photos" class="review-grid">
+        {% for img in images %}
+        <div class="review-card" onclick="openImageModal({{ img.id }}, '{{ api_prefix }}', [])">
+            <div class="review-thumb">
+                <img src="/api/thumbnails/{{ img.id }}" alt="{{ img.current_filename or img.original_filename }}" loading="lazy">
+            </div>
+            <div class="review-info">
+                <span class="review-filename">{{ img.current_filename or img.original_filename }}</span>
+                {% if img.exif_date %}
+                <span class="text-muted">{{ img.exif_date }}</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% if photo_count == 0 %}
+    <p class="text-muted">No photos found. Process some images with face recognition enabled.</p>
+    {% endif %}
+</div>
+
+<!-- Edit Person Inline Modal -->
+<div id="edit-person-modal" class="confirm-overlay" style="display:none">
+    <div class="confirm-dialog" style="max-width:400px">
+        <h3>Edit Person</h3>
+        <div style="margin:1rem 0">
+            <label class="meta-label">Name</label>
+            <input type="text" id="edit-name" class="input-text" value="{{ person.name }}" style="width:100%">
+        </div>
+        <div style="margin:1rem 0">
+            <label class="meta-label">Birthday</label>
+            <input type="date" id="edit-birthday" class="input-text" value="{{ person.birthday or '' }}" style="width:100%">
+        </div>
+        <div style="margin:1rem 0">
+            <label class="meta-label">Notes</label>
+            <textarea id="edit-notes" class="input-text" rows="2" style="width:100%">{{ person.notes or '' }}</textarea>
+        </div>
+        <div class="confirm-actions">
+            <button class="btn" onclick="document.getElementById('edit-person-modal').style.display='none'">Cancel</button>
+            <button class="btn btn-primary" onclick="savePersonEdit()">Save</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+window.DESTRUCTIVE_LIBRARY = {{ 'true' if settings.destructive_mode_library else 'false' }};
+const PERSON_ID = {{ person.id }};
+
+function editPersonInline() {
+    document.getElementById('edit-person-modal').style.display = 'flex';
+    document.getElementById('edit-name').focus();
+}
+
+async function savePersonEdit() {
+    const body = {
+        name: document.getElementById('edit-name').value.trim(),
+        birthday: document.getElementById('edit-birthday').value || null,
+        notes: document.getElementById('edit-notes').value || null,
+    };
+    if (!body.name) { alert('Name is required'); return; }
+    const resp = await fetch(`/api/persons/${PERSON_ID}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+    });
+    if (resp.ok) window.location.reload();
+    else alert('Failed to save');
+}
+
+async function removeReference(faceId) {
+    if (!confirm('Remove this reference face?')) return;
+    const resp = await fetch(`/api/faces/${faceId}/set-reference`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({is_reference: false}),
+    });
+    if (resp.ok) window.location.reload();
+}
+
+async function detectFacesForPerson() {
+    showToast('This will re-detect faces in photos of this person. Use the main scan to detect faces in all photos.', 'info');
+}
+</script>
+{% endblock %}

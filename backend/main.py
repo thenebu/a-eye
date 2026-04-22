@@ -21,6 +21,8 @@ pillow_heif.register_heif_opener()
 
 from backend.config import get_settings
 from backend.database import init_db, get_image, get_outcome_stats, get_stats, list_images, get_rename_history, count_images, count_rename_history
+from backend.face_db import count_person_images, get_image_faces, get_person, get_person_images, list_persons
+from backend.face_client import create_face_client
 from backend.ollama_client import OllamaClient
 from backend.prompts import ensure_defaults, get_active_prompt, STAGE_VISION, STAGE_CONTEXT
 from backend.routes import create_api_router
@@ -74,8 +76,14 @@ async def lifespan(app: FastAPI):
     )
     app.state.ollama = ollama
 
+    # Face recognition client (local or remote, None if disabled)
+    face_client = create_face_client(settings)
+    app.state.face_client = face_client
+    if face_client:
+        logger.info("Face recognition enabled — backend=%s", settings.face_backend)
+
     # Worker queue
-    worker = WorkerQueue(db=db, settings=settings, ollama=ollama)
+    worker = WorkerQueue(db=db, settings=settings, ollama=ollama, face_client=face_client)
     app.state.worker = worker
     await worker.start()
 
@@ -126,6 +134,8 @@ async def lifespan(app: FastAPI):
     await scheduler.stop()
     await watcher.stop()
     await worker.stop()
+    if face_client:
+        await face_client.close()
     await ollama.close()
     await db.close()
     logger.info("A-Eye shut down")
@@ -383,6 +393,60 @@ async def page_mosaic(request: Request):
         return HTMLResponse("<p>Templates not found</p>")
     ctx = _page_context(request)
     return templates.TemplateResponse(request, name="mosaic.html", context=ctx)
+
+
+@app.get("/persons", response_class=HTMLResponse)
+async def page_persons(request: Request):
+    if not templates:
+        return HTMLResponse("<p>Templates not found</p>")
+    ctx = _page_context(request)
+    return templates.TemplateResponse(request, name="persons.html", context=ctx)
+
+
+@app.get("/persons/{person_id}", response_class=HTMLResponse)
+async def page_person_detail(request: Request, person_id: int):
+    if not templates:
+        return HTMLResponse("<p>Templates not found</p>")
+    db = request.app.state.db
+    person = await get_person(db, person_id)
+    if not person:
+        return HTMLResponse("<p>Person not found</p>", status_code=404)
+
+    images = await get_person_images(db, person_id, limit=100)
+    photo_count = await count_person_images(db, person_id)
+
+    # Get reference faces
+    cursor = await db.execute(
+        "SELECT f.id, f.bbox_x, f.bbox_y, f.bbox_w, f.bbox_h "
+        "FROM image_faces f WHERE f.person_id = ? AND f.is_reference = 1",
+        (person_id,),
+    )
+    reference_faces = [dict(r) for r in await cursor.fetchall()]
+
+    # Calculate age
+    age = None
+    if person.get("birthday"):
+        from datetime import date
+        try:
+            bd = date.fromisoformat(person["birthday"])
+            today = date.today()
+            age = today.year - bd.year
+            if (today.month, today.day) < (bd.month, bd.day):
+                age -= 1
+        except ValueError:
+            pass
+
+    ctx = _page_context(request)
+    ctx.update({
+        "person": person,
+        "images": images,
+        "photo_count": photo_count,
+        "reference_faces": reference_faces,
+        "reference_count": len(reference_faces),
+        "age": age,
+        "api_prefix": "/api",
+    })
+    return templates.TemplateResponse(request, name="person_detail.html", context=ctx)
 
 
 @app.get("/history", response_class=HTMLResponse)

@@ -11,3 +11,5 @@ python-multipart
 reverse_geocode
 watchfiles
 pydantic-settings
+numpy
+face_recognition

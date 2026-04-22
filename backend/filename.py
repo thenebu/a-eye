@@ -53,10 +53,11 @@ def render_template(
     location: str | None = None,
     description: str = "",
     camera: str | None = None,
+    persons: str | None = None,
 ) -> str:
     """Render a filename template with available values.
 
-    Template placeholders: {date}, {location}, {description}, {camera}
+    Template placeholders: {date}, {location}, {description}, {camera}, {persons}
     Missing values are omitted (and their surrounding separators cleaned up).
     """
     replacements = {
@@ -64,6 +65,7 @@ def render_template(
         "{location}": location or "",
         "{description}": description,
         "{camera}": camera or "",
+        "{persons}": persons or "",
     }
 
     result = template
